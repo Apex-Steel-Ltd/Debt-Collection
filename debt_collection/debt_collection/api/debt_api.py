@@ -1,0 +1,542 @@
+import frappe
+from frappe import _
+from frappe.utils import nowdate, getdate, flt, add_days, get_first_day, get_last_day
+
+
+CASH_CUSTOMER = "CASH CUSTOMER CONTROL"
+INTEREST_RATE = 0.14
+
+
+def _get_sales_person_for_invoice(invoice_name, customer):
+	"""
+	If customer == CASH CUSTOMER CONTROL → fetch from Sales Invoice sales_team child.
+	Otherwise → fetch from Customer sales_team child.
+	"""
+	if customer == CASH_CUSTOMER:
+		sp = frappe.db.get_value(
+			"Sales Team",
+			{"parent": invoice_name, "parenttype": "Sales Invoice"},
+			"sales_person"
+		)
+	else:
+		sp = frappe.db.get_value(
+			"Sales Team",
+			{"parent": customer, "parenttype": "Customer"},
+			"sales_person"
+		)
+	return sp or ""
+
+
+def _get_pdc_for_invoices(invoice_names):
+	"""
+	Returns dict: {invoice_name: {"pdc_amount": x, "pdc_date": y}}
+	PDC = submitted Payment Entry with posting_date > today linked to invoices.
+	"""
+	if not invoice_names:
+		return {}
+
+	placeholders = ", ".join(["%s"] * len(invoice_names))
+	rows = frappe.db.sql(f"""
+		SELECT
+			per.reference_name AS invoice,
+			SUM(per.allocated_amount) AS pdc_amount,
+			MIN(pe.posting_date) AS pdc_date
+		FROM `tabPayment Entry Reference` per
+		INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+		WHERE
+			per.reference_doctype = 'Sales Invoice'
+			AND per.reference_name IN ({placeholders})
+			AND pe.docstatus = 1
+			AND pe.posting_date > %s
+			AND pe.payment_type IN ('Receive', 'Pay')
+		GROUP BY per.reference_name
+	""", tuple(invoice_names) + (nowdate(),), as_dict=True)
+
+	return {r.invoice: {"pdc_amount": r.pdc_amount, "pdc_date": str(r.pdc_date) if r.pdc_date else ""} for r in rows}
+
+
+@frappe.whitelist()
+def get_outstanding_customers(ageing_filter=None, collector=None, search=None, page=1, page_size=50):
+	"""
+	Returns aggregated outstanding customer data for the Outstanding Invoices dashboard.
+	ageing_filter: 'over_120' | 'over_90' | 'over_60' | 'over_30' | 'current' | None (all)
+	"""
+	today = getdate(nowdate())
+	conditions = ["si.docstatus = 1", "si.outstanding_amount > 0"]
+	params = []
+
+	ageing_map = {
+		"over_120": 120, "over_90": 90, "over_60": 60, "over_30": 30
+	}
+
+	if ageing_filter == "current":
+		conditions.append("DATEDIFF(%s, si.due_date) <= 0")
+		params.append(today)
+	elif ageing_filter in ageing_map:
+		days = ageing_map[ageing_filter]
+		conditions.append(f"DATEDIFF(%s, si.due_date) > {days}")
+		params.append(today)
+
+	if collector:
+		conditions.append("c.custom_debt_collector = %s")
+		params.append(collector)
+
+	if search:
+		conditions.append("(si.customer LIKE %s OR si.customer_name LIKE %s)")
+		params += [f"%{search}%", f"%{search}%"]
+
+	where_clause = " AND ".join(conditions)
+	offset = (int(page) - 1) * int(page_size)
+
+	data = frappe.db.sql(f"""
+		SELECT
+			si.customer,
+			si.customer_name,
+			c.custom_debt_collector AS debt_collector,
+			COUNT(si.name) AS invoice_count,
+			SUM(si.grand_total) AS total_inv_amount,
+			SUM(si.outstanding_amount) AS outstanding_amount,
+			AVG(GREATEST(DATEDIFF(%s, si.due_date), 0)) AS avg_overdue_days,
+			GROUP_CONCAT(si.name) AS invoice_list
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` c ON c.name = si.customer
+		WHERE {where_clause}
+		GROUP BY si.customer
+		ORDER BY SUM(si.outstanding_amount) DESC
+		LIMIT %s OFFSET %s
+	""", [today] + params + [int(page_size), offset], as_dict=True)
+
+	# Get total count for pagination
+	count_row = frappe.db.sql(f"""
+		SELECT COUNT(DISTINCT si.customer) AS total
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` c ON c.name = si.customer
+		WHERE {where_clause}
+	""", [today] + params, as_dict=True)
+	total = count_row[0].total if count_row else 0
+
+	# Enrich with PDC data
+	all_invoices = []
+	for row in data:
+		if row.invoice_list:
+			all_invoices.extend(row.invoice_list.split(","))
+
+	pdc_map = _get_pdc_for_invoices(all_invoices) if all_invoices else {}
+
+	# Per-customer PDC aggregation
+	for row in data:
+		pdc_total = 0
+		if row.invoice_list:
+			for inv in row.invoice_list.split(","):
+				pdc_total += flt(pdc_map.get(inv, {}).get("pdc_amount", 0))
+		row.pdc_amount = pdc_total
+		row.net_outstanding = flt(row.outstanding_amount) - pdc_total
+		row.interest_loss = flt(row.outstanding_amount) * INTEREST_RATE * (flt(row.avg_overdue_days) / 365)
+		row.pop("invoice_list", None)
+
+	return {"data": data, "total": total}
+
+
+@frappe.whitelist()
+def get_customer_invoices(customer):
+	"""
+	Returns all outstanding invoices for a customer with PDC details and ageing buckets.
+	"""
+	today = getdate(nowdate())
+
+	invoices = frappe.db.sql("""
+		SELECT
+			si.name,
+			si.posting_date AS invoice_date,
+			si.due_date,
+			si.payment_terms_template AS payment_terms,
+			si.grand_total AS invoice_amount,
+			si.outstanding_amount,
+			GREATEST(DATEDIFF(%s, si.due_date), 0) AS overdue_days,
+			si.customer
+		FROM `tabSales Invoice` si
+		WHERE si.customer = %s
+		  AND si.docstatus = 1
+		  AND si.outstanding_amount > 0
+		ORDER BY si.due_date ASC
+	""", (today, customer), as_dict=True)
+
+	invoice_names = [i.name for i in invoices]
+	pdc_map = _get_pdc_for_invoices(invoice_names)
+
+	ageing = {}
+	for inv in invoices:
+		pdc = pdc_map.get(inv.name, {})
+		inv.pdc_amount = flt(pdc.get("pdc_amount", 0))
+		inv.pdc_date = pdc.get("pdc_date", "")
+		inv.net_outstanding = flt(inv.outstanding_amount) - inv.pdc_amount
+		inv.sales_person = _get_sales_person_for_invoice(inv.name, customer)
+
+		# Bucket by invoice month
+		month_key = str(inv.invoice_date)[:7] if inv.invoice_date else "Unknown"
+		ageing[month_key] = flt(ageing.get(month_key, 0)) + flt(inv.outstanding_amount)
+
+	return {"invoices": invoices, "ageing": ageing}
+
+
+@frappe.whitelist()
+def get_dashboard_summary(collector=None):
+	"""Recovery Dashboard summary stats and top customers."""
+	today = getdate(nowdate())
+
+	# Collector filter — only injected into WHERE when provided
+	collector_cond   = " AND c.custom_debt_collector = %s" if collector else ""
+	collector_params = [collector] if collector else []
+
+	base_inv_where = f"si.docstatus = 1 AND si.outstanding_amount > 0{collector_cond}"
+
+	# ── Ageing totals ──────────────────────────────────────────────────────────
+	# 5 × today feeds the 5 DATEDIFF() calls; collector_params feeds the WHERE
+	totals = frappe.db.sql(f"""
+		SELECT
+			SUM(si.outstanding_amount) AS total_outstanding,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) <= 30
+			         THEN si.outstanding_amount ELSE 0 END) AS under_30,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 31 AND 60
+			         THEN si.outstanding_amount ELSE 0 END) AS over_30,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 61 AND 90
+			         THEN si.outstanding_amount ELSE 0 END) AS over_60,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 91 AND 120
+			         THEN si.outstanding_amount ELSE 0 END) AS over_90,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) > 120
+			         THEN si.outstanding_amount ELSE 0 END) AS over_120
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` c ON c.name = si.customer
+		WHERE {base_inv_where}
+	""", [today, today, today, today, today] + collector_params, as_dict=True)
+
+	# ── Total PDC ──────────────────────────────────────────────────────────────
+	pdc_collector_cond   = " AND c.custom_debt_collector = %s" if collector else ""
+	pdc_collector_params = [collector] if collector else []
+
+	pdc_total = frappe.db.sql(f"""
+		SELECT SUM(pe.paid_amount) AS total_pdc
+		FROM `tabPayment Entry` pe
+		LEFT JOIN `tabCustomer` c ON c.name = pe.party
+		WHERE pe.payment_type = 'Receive'
+		  AND pe.party_type   = 'Customer'
+		  AND pe.docstatus    = 1
+		  AND pe.posting_date > %s
+		  {pdc_collector_cond}
+	""", [today] + pdc_collector_params, as_dict=True)
+
+	# ── Top 10 customers ───────────────────────────────────────────────────────
+	# collector_params is [] or [collector] — no stray 'today' in this query
+	top_customers = frappe.db.sql(f"""
+		SELECT
+			si.customer,
+			si.customer_name,
+			SUM(si.outstanding_amount) AS outstanding_amount,
+			COUNT(si.name)             AS invoice_count
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` c ON c.name = si.customer
+		WHERE {base_inv_where}
+		GROUP BY si.customer
+		ORDER BY SUM(si.outstanding_amount) DESC
+		LIMIT 10
+	""", collector_params, as_dict=True)
+
+	# ── Recent activity ────────────────────────────────────────────────────────
+	recent_cond   = "cfu.collector = %s" if collector else "1=1"
+	recent_params = [collector] if collector else []
+
+	recent_activity = frappe.db.sql(f"""
+		SELECT
+			cfu.name,
+			cfu.customer,
+			cfu.customer_name,
+			cfu.contact_method,
+			cfu.remarks,
+			cfu.collector,
+			DATE(cfu.creation) AS created_date
+		FROM `tabCollection Follow Up` cfu
+		WHERE {recent_cond}
+		ORDER BY cfu.creation DESC
+		LIMIT 10
+	""", recent_params, as_dict=True)
+
+	summary           = totals[0] if totals else {}
+	total_pdc         = flt(pdc_total[0].total_pdc) if pdc_total else 0
+	total_outstanding = flt(summary.get("total_outstanding", 0))
+	summary["total_pdc"]       = total_pdc
+	summary["net_outstanding"] = total_outstanding - total_pdc
+
+	return {
+		"summary":         summary,
+		"top_customers":   top_customers,
+		"recent_activity": recent_activity,
+	}
+
+
+@frappe.whitelist()
+def get_weekly_plans(week_start=None):
+	"""Get all active weekly collection plans, optionally filtered by week start date."""
+	filters = {"status": ["!=", "Closed"]}
+	if week_start:
+		filters["start_date"] = week_start
+
+	plans = frappe.get_all(
+		"Weekly Collection Plan",
+		filters=filters,
+		fields=["name", "start_date", "end_date", "status"],
+		order_by="start_date desc",
+		limit=20,
+	)
+	result = []
+	for plan in plans:
+		customers = frappe.get_all(
+			"Weekly Collection Plan Customer",
+			filters={"parent": plan.name},
+			fields=["customer", "customer_name", "sales_representative", "debt_collector",
+					"outstanding_amount", "pdc_amount", "net_outstanding", "avg_overdue_days",
+					"planner_invoices", "status"],
+		)
+		plan["customers"] = customers
+		result.append(plan)
+	return result
+
+
+@frappe.whitelist()
+def add_customers_to_plan(customers, week_start):
+	"""
+	Add a list of customer dicts to the matching Weekly Collection Plan for the given week.
+	Creates the plan if it doesn't exist for that week.
+	customers: JSON string list of customer names
+	week_start: ISO date string (Monday of target week)
+	"""
+	import json
+	if isinstance(customers, str):
+		customers = json.loads(customers)
+
+	week_start_date = getdate(week_start)
+	week_end_date = week_start_date + __import__("datetime").timedelta(days=6)
+
+	# Find or create plan
+	existing = frappe.db.get_value(
+		"Weekly Collection Plan",
+		{"start_date": week_start_date, "status": ["!=", "Closed"]},
+		"name"
+	)
+
+	if existing:
+		plan = frappe.get_doc("Weekly Collection Plan", existing)
+	else:
+		plan = frappe.new_doc("Weekly Collection Plan")
+		plan.start_date = week_start_date
+		plan.end_date = week_end_date
+		plan.status = "Open"
+
+	# Check which customers already in plan
+	existing_customers = {row.customer for row in plan.get("customers", [])}
+	added, skipped = [], []
+
+	for customer_name in customers:
+		if customer_name in existing_customers:
+			skipped.append(customer_name)
+			continue
+
+		# Pull live stats
+		stats = _get_customer_stats(customer_name)
+		plan.append("customers", {
+			"customer": customer_name,
+			"customer_name": stats.get("customer_name", ""),
+			"sales_representative": stats.get("sales_person", ""),
+			"debt_collector": frappe.db.get_value("Customer", customer_name, "custom_debt_collector"),
+			"outstanding_amount": stats.get("outstanding_amount", 0),
+			"pdc_amount": stats.get("pdc_amount", 0),
+			"net_outstanding": stats.get("net_outstanding", 0),
+			"avg_overdue_days": stats.get("avg_overdue_days", 0),
+			"planner_invoices": stats.get("invoice_count", 0),
+			"status": "Planned",
+		})
+		added.append(customer_name)
+
+	plan.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	return {"plan": plan.name, "added": added, "skipped": skipped}
+
+
+def _get_customer_stats(customer):
+	"""Quick stats for a single customer."""
+	today = getdate(nowdate())
+	row = frappe.db.sql("""
+		SELECT
+			si.customer_name,
+			COUNT(si.name) AS invoice_count,
+			SUM(si.grand_total) AS total_inv_amount,
+			SUM(si.outstanding_amount) AS outstanding_amount,
+			AVG(GREATEST(DATEDIFF(%s, si.due_date), 0)) AS avg_overdue_days,
+			GROUP_CONCAT(si.name) AS invoice_list
+		FROM `tabSales Invoice` si
+		WHERE si.customer = %s AND si.docstatus = 1 AND si.outstanding_amount > 0
+		GROUP BY si.customer
+	""", (today, customer), as_dict=True)
+
+	if not row:
+		return {}
+
+	stats = row[0]
+	invoice_names = stats.invoice_list.split(",") if stats.invoice_list else []
+	pdc_map = _get_pdc_for_invoices(invoice_names)
+	pdc_total = sum(flt(v.get("pdc_amount", 0)) for v in pdc_map.values())
+	stats.pdc_amount = pdc_total
+	stats.net_outstanding = flt(stats.outstanding_amount) - pdc_total
+
+	# Sales person from most recent invoice
+	if invoice_names:
+		stats.sales_person = _get_sales_person_for_invoice(invoice_names[0], customer)
+
+	return stats
+
+
+@frappe.whitelist()
+def get_collectors():
+	"""Return all users assigned as debt collector on any customer."""
+	rows = frappe.db.sql("""
+		SELECT DISTINCT u.name, u.full_name
+		FROM `tabUser` u
+		INNER JOIN `tabCustomer` c ON c.custom_debt_collector = u.name
+		WHERE u.enabled = 1
+		ORDER BY u.full_name
+	""", as_dict=True)
+	return rows
+
+
+@frappe.whitelist()
+def get_follow_up_report(search=None, collector=None, start_date=None, end_date=None, page=1, page_size=50):
+	"""Returns paginated follow-up log for the Follow-Up Report screen."""
+	conditions = ["1=1"]
+	params = []
+
+	if search:
+		conditions.append("(cfu.customer LIKE %s OR cfu.customer_name LIKE %s)")
+		params += [f"%{search}%", f"%{search}%"]
+	if collector:
+		conditions.append("cfu.collector = %s")
+		params.append(collector)
+	if start_date:
+		conditions.append("DATE(cfu.creation) >= %s")
+		params.append(start_date)
+	if end_date:
+		conditions.append("DATE(cfu.creation) <= %s")
+		params.append(end_date)
+
+	where = " AND ".join(conditions)
+	offset = (int(page) - 1) * int(page_size)
+
+	rows = frappe.db.sql(f"""
+		SELECT
+			cfu.name,
+			cfu.customer,
+			cfu.customer_name,
+			cfu.collector,
+			u.full_name AS collector_name,
+			cfu.contact_method,
+			cfu.remarks,
+			cfu.next_follow_up_date,
+			DATE(cfu.creation) AS created_date
+		FROM `tabCollection Follow Up` cfu
+		LEFT JOIN `tabUser` u ON u.name = cfu.collector
+		WHERE {where}
+		ORDER BY cfu.creation DESC
+		LIMIT %s OFFSET %s
+	""", params + [int(page_size), offset], as_dict=True)
+
+	total = frappe.db.sql(f"""
+		SELECT COUNT(*) AS cnt FROM `tabCollection Follow Up` cfu WHERE {where}
+	""", params, as_dict=True)[0].cnt
+
+	return {"data": rows, "total": total}
+
+
+@frappe.whitelist()
+def get_pdc_aging():
+	"""PDC Aging report — maturing by week buckets."""
+	today = getdate(nowdate())
+	next7 = add_days(today, 7)
+	next14 = add_days(today, 14)
+	next21 = add_days(today, 21)
+	next28 = add_days(today, 28)
+
+	rows = frappe.db.sql("""
+		SELECT
+			pe.party AS customer,
+			c.customer_name,
+			c.custom_debt_collector AS collector,
+			SUM(pe.paid_amount) AS grand_total,
+			SUM(CASE WHEN pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS this_week,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS next_14,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS next_21,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS next_28,
+			SUM(CASE WHEN pe.posting_date > %s THEN pe.paid_amount ELSE 0 END) AS over_28
+		FROM `tabPayment Entry` pe
+		LEFT JOIN `tabCustomer` c ON c.name = pe.party
+		WHERE
+			pe.docstatus = 1
+			AND pe.party_type = 'Customer'
+			AND pe.payment_type = 'Receive'
+			AND pe.posting_date > %s
+		GROUP BY pe.party
+		ORDER BY SUM(pe.paid_amount) DESC
+	""", (next7, next7, next14, next14, next21, next21, next28, next28, today), as_dict=True)
+
+	return rows
+
+
+@frappe.whitelist()
+def get_salesperson_outstanding():
+	"""Salesperson-wise aggregated net outstanding."""
+	today = getdate(nowdate())
+
+	rows = frappe.db.sql("""
+		SELECT
+			st.sales_person,
+			SUM(si.outstanding_amount) AS total_outstanding
+		FROM `tabSales Invoice` si
+		INNER JOIN `tabSales Team` st ON (
+			CASE
+				WHEN si.customer = %s THEN (st.parent = si.name AND st.parenttype = 'Sales Invoice')
+				ELSE (st.parent = si.customer AND st.parenttype = 'Customer')
+			END
+		)
+		WHERE si.docstatus = 1 AND si.outstanding_amount > 0
+		GROUP BY st.sales_person
+		ORDER BY SUM(si.outstanding_amount) DESC
+	""", (CASH_CUSTOMER,), as_dict=True)
+
+	return rows
+
+
+@frappe.whitelist()
+def save_follow_up(customer, contact_method, contact_person=None, cc_contacts=None,
+				   next_follow_up_date=None, remarks=None, supporting_document=None,
+				   weekly_collection_plan=None, invoices=None):
+	"""Save a Collection Follow Up record (called from custom page)."""
+	import json
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
+
+	doc = frappe.new_doc("Collection Follow Up")
+	doc.customer = customer
+	doc.contact_method = contact_method
+	doc.contact_person = contact_person
+	doc.cc_contacts = cc_contacts
+	doc.next_follow_up_date = next_follow_up_date
+	doc.remarks = remarks
+	doc.supporting_document = supporting_document
+	doc.weekly_collection_plan = weekly_collection_plan
+	doc.collector = frappe.db.get_value("Customer", customer, "custom_debt_collector")
+
+	if invoices:
+		for inv in invoices:
+			doc.append("invoices", inv)
+
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return doc.name

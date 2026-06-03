@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "creation": "2026-06-03 00:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Child Table",
+ "engine": "InnoDB",
+ "field_order": [
+  "sales_invoice",
+  "invoice_date",
+  "due_date",
+  "col_break_1",
+  "overdue_days",
+  "payment_terms",
+  "section_amounts",
+  "invoice_amount",
+  "outstanding_amount",
+  "col_break_2",
+  "pdc_amount",
+  "pdc_date",
+  "net_outstanding"
+ ],
+ "fields": [
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Invoice No.",
+   "options": "Sales Invoice",
+   "reqd": 1
+  },
+  {
+   "fieldname": "invoice_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Invoice Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Due Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "overdue_days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Overdue Days"
+  },
+  {
+   "fieldname": "payment_terms",
+   "fieldtype": "Data",
+   "label": "Payment Terms"
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break",
+   "label": "Amounts"
+  },
+  {
+   "fieldname": "invoice_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Invoice Amount"
+  },
+  {
+   "fieldname": "outstanding_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Outstanding Amount"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pdc_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "PDC Amount"
+  },
+  {
+   "fieldname": "pdc_date",
+   "fieldtype": "Date",
+   "label": "PDC Maturity Date"
+  },
+  {
+   "fieldname": "net_outstanding",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Net Outstanding"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Debt Collection",
+ "name": "Collection Follow Up Invoice",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

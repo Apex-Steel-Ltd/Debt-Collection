@@ -1,0 +1,17 @@
+{
+ "creation": "2026-06-03 00:00:00.000000",
+ "doctype": "Page",
+ "icon": "users",
+ "modified": "2026-06-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Debt Collection",
+ "name": "collection-follow-up",
+ "owner": "Administrator",
+ "page_name": "collection-follow-up",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Accounts User"}
+ ],
+ "standard": "Yes",
+ "title": "Collection Follow-Up"
+}

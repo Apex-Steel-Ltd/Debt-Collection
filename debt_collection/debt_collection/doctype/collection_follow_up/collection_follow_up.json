@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "autoname": "format:CFU-{YYYY}-{MM}-{####}",
+ "creation": "2026-06-03 00:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "customer_name",
+  "weekly_collection_plan",
+  "collector",
+  "col_break_top",
+  "contact_method",
+  "contact_person",
+  "next_follow_up_date",
+  "section_cc",
+  "cc_contacts",
+  "section_remarks",
+  "remarks",
+  "supporting_document",
+  "section_invoices",
+  "invoices"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "weekly_collection_plan",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Weekly Collection Plan",
+   "options": "Weekly Collection Plan"
+  },
+  {
+   "fetch_from": "customer.custom_debt_collector",
+   "fieldname": "collector",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Debt Collector",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_top",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contact_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Contact Method",
+   "options": "Call\nEmail\nPhysical Visit\nSMS\nWhatsApp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "contact_person",
+   "fieldtype": "Link",
+   "label": "Contact Person",
+   "options": "Contact"
+  },
+  {
+   "fieldname": "next_follow_up_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Next Follow-Up Date"
+  },
+  {
+   "fieldname": "section_cc",
+   "fieldtype": "Section Break",
+   "label": "CC Contacts"
+  },
+  {
+   "description": "Comma-separated email addresses to CC on follow-up emails",
+   "fieldname": "cc_contacts",
+   "fieldtype": "Small Text",
+   "label": "CC Contacts (Emails)"
+  },
+  {
+   "fieldname": "section_remarks",
+   "fieldtype": "Section Break",
+   "label": "Remarks & Attachments"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supporting_document",
+   "fieldtype": "Attach",
+   "label": "Supporting Document"
+  },
+  {
+   "fieldname": "section_invoices",
+   "fieldtype": "Section Break",
+   "label": "Outstanding Invoices Covered"
+  },
+  {
+   "fieldname": "invoices",
+   "fieldtype": "Table",
+   "label": "Invoices",
+   "options": "Collection Follow Up Invoice"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-06-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Debt Collection",
+ "name": "Collection Follow Up",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
