@@ -1,0 +1,222 @@
+/* ────────────────────────────────────────────────────────────────────────────
+   Debt Collection App — Shared Styles
+   Loaded globally via app_include_css in hooks.py
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Layout ──────────────────────────────────────── */
+.dc-page { padding: 20px; }
+
+/* ── Tab bar ─────────────────────────────────────── */
+.dc-tab-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.dc-tab {
+	padding: 6px 14px;
+	border: 1px solid #cbd5e0;
+	border-radius: 20px;
+	background: #fff;
+	color: #4a5568;
+	font-size: 13px;
+	cursor: pointer;
+	transition: all .15s;
+}
+.dc-tab:hover { background: #edf2f7; }
+.dc-tab.active {
+	background: #2b6cb0;
+	color: #fff;
+	border-color: #2b6cb0;
+	font-weight: 600;
+}
+
+/* ── Table ───────────────────────────────────────── */
+.dc-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+	background: #fff;
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+.dc-table thead tr { background: #f7fafc; }
+.dc-table th {
+	padding: 10px 12px;
+	text-align: left;
+	font-weight: 600;
+	color: #4a5568;
+	border-bottom: 2px solid #e2e8f0;
+	white-space: nowrap;
+}
+.dc-table td {
+	padding: 9px 12px;
+	border-bottom: 1px solid #edf2f7;
+	color: #2d3748;
+}
+.dc-table tbody tr:last-child td { border-bottom: none; }
+.dc-table tbody tr:hover { background: #f7fafc; }
+.dc-table-sm th,
+.dc-table-sm td { padding: 6px 8px; font-size: 12px; }
+
+/* ── Buttons ─────────────────────────────────────── */
+.dc-btn-sm {
+	padding: 4px 12px;
+	border: 1px solid #cbd5e0;
+	border-radius: 4px;
+	background: #fff;
+	color: #2b6cb0;
+	font-size: 12px;
+	cursor: pointer;
+	transition: background .15s;
+}
+.dc-btn-sm:hover { background: #ebf8ff; }
+
+.dc-link-btn {
+	background: none;
+	border: none;
+	color: #2b6cb0;
+	cursor: pointer;
+	font-size: 13px;
+	padding: 0;
+	text-align: left;
+}
+.dc-link-btn:hover { text-decoration: underline; }
+
+/* ── Badges ──────────────────────────────────────── */
+.dc-badge-blue {
+	display: inline-block;
+	padding: 2px 8px;
+	background: #bee3f8;
+	color: #2b6cb0;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+/* ── Dashboard — summary cards ───────────────────── */
+.dc-summary-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 16px;
+}
+.dc-stat-card {
+	background: #fff;
+	border-radius: 10px;
+	padding: 18px 20px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.dc-stat-card.primary { border-left: 4px solid #2b6cb0; }
+.dc-stat-card.warning { border-left: 4px solid #d69e2e; }
+.dc-stat-card.success { border-left: 4px solid #38a169; }
+.dc-stat-icon { font-size: 22px; }
+.dc-stat-label {
+	font-size: 12px;
+	color: #718096;
+	text-transform: uppercase;
+	letter-spacing: .5px;
+}
+.dc-stat-value { font-size: 22px; font-weight: 700; color: #2d3748; }
+
+/* ── Dashboard — ageing cards ────────────────────── */
+.dc-aging-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+}
+.dc-aging-card {
+	background: #fff;
+	border-radius: 8px;
+	padding: 14px 16px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .07);
+}
+.dc-aging-label { font-size: 12px; color: #718096; margin-bottom: 4px; }
+.dc-aging-value { font-size: 18px; font-weight: 700; }
+
+/* ── Cards ───────────────────────────────────────── */
+.dc-card {
+	background: #fff;
+	border-radius: 10px;
+	padding: 0;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+	overflow: hidden;
+}
+.dc-card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 18px;
+	border-bottom: 1px solid #edf2f7;
+	font-weight: 600;
+	font-size: 14px;
+	color: #2d3748;
+}
+
+/* ── Priority list ───────────────────────────────── */
+.dc-priority-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 18px;
+	border-bottom: 1px solid #edf2f7;
+	cursor: pointer;
+	transition: background .12s;
+}
+.dc-priority-row:last-child { border-bottom: none; }
+.dc-priority-row:hover { background: #f7fafc; }
+.dc-priority-name { font-weight: 600; font-size: 13px; color: #2d3748; }
+.dc-priority-sub { font-size: 11px; color: #a0aec0; margin-top: 2px; }
+
+/* ── Activity feed ───────────────────────────────── */
+.dc-activity-row {
+	display: flex;
+	gap: 12px;
+	padding: 12px 18px;
+	border-bottom: 1px solid #edf2f7;
+}
+.dc-activity-row:last-child { border-bottom: none; }
+.dc-activity-avatar {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: #bee3f8;
+	color: #2b6cb0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 15px;
+	flex-shrink: 0;
+}
+.dc-activity-name { font-weight: 600; font-size: 13px; color: #2d3748; }
+.dc-activity-method { font-size: 11px; color: #718096; }
+.dc-activity-remarks { font-size: 12px; color: #4a5568; margin-top: 2px; }
+.dc-activity-date { font-size: 11px; color: #a0aec0; margin-top: 2px; }
+
+/* ── Ageing buckets (customer drawer) ────────────── */
+.dc-ageing-buckets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 16px;
+}
+.dc-ageing-bucket {
+	background: #f7fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 10px 14px;
+	min-width: 110px;
+}
+.dc-ageing-month { font-size: 11px; color: #718096; margin-bottom: 3px; }
+.dc-ageing-amt { font-size: 15px; font-weight: 700; color: #2d3748; }
+
+/* ── Grid layout ─────────────────────────────────── */
+.dc-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+	margin-top: 24px;
+}

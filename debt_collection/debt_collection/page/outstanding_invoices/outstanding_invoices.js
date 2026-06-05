@@ -40,7 +40,7 @@ class OutstandingInvoicesPage {
 
 	render_layout() {
 		$(this.page.body).html(`
-			<div class="dc-page" style="padding:20px;">
+			<div class="dc-page">
 				<div class="dc-tab-bar" id="oi-tabs">
 					${["all","over_120","over_90","over_60","over_30","current"].map(f => `
 						<button class="dc-tab ${f === "all" ? "active" : ""}" data-filter="${f}">
