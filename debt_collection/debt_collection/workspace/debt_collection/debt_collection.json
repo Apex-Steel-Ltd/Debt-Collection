@@ -1,7 +1,7 @@
 {
  "charts": [],
- "content": "[{\"id\":\"GYinQv-iE2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"0WF4P3ouaH\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"S8ymYkXAv6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"nOMpBMevPj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Ups\",\"col\":3}},{\"id\":\"NlxEJJ_4r3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}},{\"id\":\"zVMzYbfeTE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Collection Follow Up\",\"col\":3}}]",
- "creation": "2026-06-05 09:28:23.891807",
+ "content": "[{\"id\":\"0L6riBumCR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"ByoUktwgr1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"KD3h97F3HE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"Ho7-aZmstV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Dashboard\",\"col\":3}},{\"id\":\"Y3-Cx30cKF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}}]",
+ "creation": "2026-06-05 10:24:24.387679",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -9,11 +9,11 @@
  "hide_custom": 0,
  "icon": "loan",
  "idx": 0,
- "indicator_color": "red",
+ "indicator_color": "green",
  "is_hidden": 0,
  "label": "Debt Collection",
  "links": [],
- "modified": "2026-06-05 09:33:25.608419",
+ "modified": "2026-06-05 10:27:42.765797",
  "modified_by": "Administrator",
  "module": "Debt Collection",
  "name": "Debt Collection",
@@ -42,8 +42,8 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Follow Ups",
-   "link_to": "collection-follow-up",
+   "label": "Follow Up Dashboard",
+   "link_to": "follow-up-dashboard",
    "type": "Page"
   },
   {
@@ -51,14 +51,6 @@
    "doc_view": "List",
    "label": "Weekly Collection Plan",
    "link_to": "Weekly Collection Plan",
-   "stats_filter": "[]",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Collection Follow Up",
-   "link_to": "Collection Follow Up",
    "stats_filter": "[]",
    "type": "DocType"
   }
