@@ -1,8 +1,8 @@
-frappe.pages["collection-follow-up"].on_page_load = function (wrapper) {
-	frappe.collection_follow_up = new CollectionFollowUpPage(wrapper);
+frappe.pages["collection-follow-up-form"].on_page_load = function (wrapper) {
+	frappe.collection_follow_up_form = new CollectionFollowUpFormPage(wrapper);
 };
 
-class CollectionFollowUpPage {
+class CollectionFollowUpFormPage {
 	constructor(wrapper) {
 		this.wrapper = wrapper;
 		this.page = frappe.ui.make_app_page({
@@ -204,7 +204,7 @@ class CollectionFollowUpPage {
 					message: `Follow-up <a href="/app/collection-follow-up/${r.message}">${r.message}</a> saved and email sent.`,
 					indicator: "green",
 				}, 6);
-				frappe.set_route("debt-collection-dashboard");
+				frappe.set_route("follow-up-dashboard");
 			},
 		});
 	}

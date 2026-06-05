@@ -293,7 +293,7 @@ class OutstandingInvoicesPage {
 					selected.push(JSON.parse($(el).data("inv")));
 				});
 				d.hide();
-				frappe.set_route("collection-follow-up", { customer, invoices: JSON.stringify(selected) });
+				frappe.set_route("collection-follow-up-form", { customer, invoices: JSON.stringify(selected) });
 			},
 		});
 		d.show();

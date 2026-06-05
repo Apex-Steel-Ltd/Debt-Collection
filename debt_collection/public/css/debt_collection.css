@@ -220,3 +220,142 @@
 	gap: 20px;
 	margin-top: 24px;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Collection Follow-Up Dashboard
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Week summary row ────────────────────────────── */
+.dc-cfu-week-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+.dc-cfu-week-card {
+	background: #fff;
+	border: 2px solid #e2e8f0;
+	border-radius: 10px;
+	padding: 14px 18px;
+	cursor: pointer;
+	min-width: 220px;
+	flex: 1;
+	transition: border-color .15s, box-shadow .15s;
+}
+.dc-cfu-week-card:hover {
+	border-color: #90cdf4;
+	box-shadow: 0 2px 8px rgba(43,108,176,.1);
+}
+.dc-cfu-week-card.active {
+	border-color: #2b6cb0;
+	background: #ebf8ff;
+}
+.dc-cfu-week-label {
+	font-size: 12px;
+	font-weight: 600;
+	color: #4a5568;
+	text-transform: uppercase;
+	letter-spacing: .5px;
+	margin-bottom: 10px;
+}
+.dc-cfu-week-stats {
+	display: flex;
+	gap: 20px;
+}
+.dc-cfu-week-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.dc-cfu-stat-num {
+	font-size: 20px;
+	font-weight: 700;
+	color: #2d3748;
+}
+.dc-cfu-stat-lbl {
+	font-size: 11px;
+	color: #a0aec0;
+}
+
+/* ── Follow-up list ──────────────────────────────── */
+.dc-cfu-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.dc-cfu-row {
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 14px 18px;
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 16px;
+	cursor: pointer;
+	transition: box-shadow .15s, border-color .15s;
+}
+.dc-cfu-row:hover {
+	border-color: #90cdf4;
+	box-shadow: 0 2px 8px rgba(43,108,176,.08);
+}
+.dc-cfu-row-left { flex: 1; min-width: 0; }
+.dc-cfu-row-right {
+	text-align: right;
+	flex-shrink: 0;
+	min-width: 160px;
+}
+.dc-cfu-customer {
+	font-weight: 700;
+	font-size: 14px;
+	color: #2d3748;
+	margin-bottom: 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.dc-cfu-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+.dc-cfu-remarks {
+	font-size: 13px;
+	color: #4a5568;
+	line-height: 1.5;
+}
+
+/* ── Follow-up form layout ───────────────────────── */
+.dc-followup-wrap {
+	display: grid;
+	grid-template-columns: 380px 1fr;
+	gap: 24px;
+	padding: 20px;
+	height: calc(100vh - 120px);
+}
+.dc-followup-left {
+	overflow-y: auto;
+	padding-right: 8px;
+}
+.dc-followup-right { overflow: hidden; }
+.dc-section-title {
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .5px;
+	color: #4a5568;
+	margin-bottom: 14px;
+}
+.dc-btn-primary {
+	padding: 9px 20px;
+	background: #2b6cb0;
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background .15s;
+}
+.dc-btn-primary:hover { background: #2c5282; }

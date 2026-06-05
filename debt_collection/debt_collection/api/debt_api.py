@@ -396,6 +396,118 @@ def _get_customer_stats(customer):
 
 
 @frappe.whitelist()
+def get_follow_up_dashboard(collector=None, week_start=None, page=1, page_size=20):
+	"""
+	Returns follow-up records grouped by ISO week, with summary stats per week
+	and per-row customer outstanding totals.
+	week_start: ISO date (Monday) to filter to a single week; None = all weeks.
+	"""
+	conditions = ["1=1"]
+	params = []
+
+	if collector:
+		conditions.append("cfu.collector = %s")
+		params.append(collector)
+	if week_start:
+		# week_start is Monday; end is Sunday
+		conditions.append("DATE(cfu.creation) >= %s AND DATE(cfu.creation) <= %s")
+		import datetime
+		ws = frappe.utils.getdate(week_start)
+		we = ws + datetime.timedelta(days=6)
+		params += [ws, we]
+
+	where = " AND ".join(conditions)
+	offset = (int(page) - 1) * int(page_size)
+
+	rows = frappe.db.sql(f"""
+		SELECT
+			cfu.name,
+			cfu.customer,
+			cfu.customer_name,
+			cfu.collector,
+			u.full_name AS collector_name,
+			cfu.contact_method,
+			cfu.remarks,
+			cfu.next_follow_up_date,
+			cfu.weekly_collection_plan,
+			cfu.contact_person,
+			cfu.cc_contacts,
+			cfu.supporting_document,
+			DATE(cfu.creation) AS created_date,
+			YEARWEEK(cfu.creation, 1) AS iso_week,
+			DATE_SUB(DATE(cfu.creation), INTERVAL WEEKDAY(cfu.creation) DAY) AS week_monday
+		FROM `tabCollection Follow Up` cfu
+		LEFT JOIN `tabUser` u ON u.name = cfu.collector
+		WHERE {where}
+		ORDER BY cfu.creation DESC
+		LIMIT %s OFFSET %s
+	""", params + [int(page_size), offset], as_dict=True)
+
+	total = frappe.db.sql(f"""
+		SELECT COUNT(*) AS cnt FROM `tabCollection Follow Up` cfu WHERE {where}
+	""", params, as_dict=True)[0].cnt
+
+	# Enrich each row with current outstanding for the customer
+	customers = list({r.customer for r in rows if r.customer})
+	outstanding_map = {}
+	if customers:
+		ph = ", ".join(["%s"] * len(customers))
+		os_rows = frappe.db.sql(f"""
+			SELECT customer, SUM(outstanding_amount) AS outstanding
+			FROM `tabSales Invoice`
+			WHERE docstatus = 1 AND outstanding_amount > 0 AND customer IN ({ph})
+			GROUP BY customer
+		""", customers, as_dict=True)
+		outstanding_map = {r.customer: flt(r.outstanding) for r in os_rows}
+
+	for r in rows:
+		r.current_outstanding = outstanding_map.get(r.customer, 0)
+		r.week_label = str(r.week_monday) if r.week_monday else "-"
+
+	# Build week-level summary (across the returned page)
+	week_summary = {}
+	for r in rows:
+		wk = r.week_label
+		if wk not in week_summary:
+			week_summary[wk] = {
+				"week_label": wk,
+				"follow_up_count": 0,
+				"unique_customers": set(),
+				"total_outstanding": 0.0,
+			}
+		week_summary[wk]["follow_up_count"] += 1
+		week_summary[wk]["unique_customers"].add(r.customer)
+		week_summary[wk]["total_outstanding"] += r.current_outstanding
+
+	for wk in week_summary:
+		week_summary[wk]["customer_count"] = len(week_summary[wk].pop("unique_customers"))
+
+	return {
+		"data": rows,
+		"total": total,
+		"week_summary": list(week_summary.values()),
+	}
+
+
+@frappe.whitelist()
+def update_follow_up(name, contact_method, remarks, next_follow_up_date=None,
+					 contact_person=None, cc_contacts=None, supporting_document=None,
+					 weekly_collection_plan=None):
+	"""Update an existing Collection Follow Up record."""
+	doc = frappe.get_doc("Collection Follow Up", name)
+	doc.contact_method = contact_method
+	doc.remarks = remarks
+	doc.next_follow_up_date = next_follow_up_date or None
+	doc.contact_person = contact_person or None
+	doc.cc_contacts = cc_contacts or None
+	doc.supporting_document = supporting_document or None
+	doc.weekly_collection_plan = weekly_collection_plan or None
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return doc.name
+
+
+@frappe.whitelist()
 def get_collectors():
 	"""Return all users assigned as debt collector on any customer."""
 	rows = frappe.db.sql("""
