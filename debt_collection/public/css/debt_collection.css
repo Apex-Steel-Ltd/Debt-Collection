@@ -359,3 +359,152 @@
 	transition: background .15s;
 }
 .dc-btn-primary:hover { background: #2c5282; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Sales Person Dashboard
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Grand totals bar ────────────────────────────── */
+.sp-grand-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+	background: #fff;
+	border-radius: 10px;
+	box-shadow: 0 1px 4px rgba(0,0,0,.08);
+	overflow: hidden;
+}
+.sp-grand-stat {
+	flex: 1;
+	min-width: 140px;
+	padding: 16px 20px;
+	border-right: 1px solid #edf2f7;
+}
+.sp-grand-stat:last-child { border-right: none; }
+.sp-grand-lbl {
+	font-size: 11px;
+	color: #718096;
+	text-transform: uppercase;
+	letter-spacing: .5px;
+	margin-bottom: 4px;
+}
+.sp-grand-val {
+	font-size: 18px;
+	font-weight: 700;
+	color: #2d3748;
+}
+
+/* ── Salesperson cards ───────────────────────────── */
+.sp-card {
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 10px;
+	margin-bottom: 12px;
+	overflow: hidden;
+	box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.sp-card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px 20px;
+	cursor: pointer;
+	transition: background .12s;
+	gap: 16px;
+}
+.sp-card-header:hover { background: #f7fafc; }
+
+.sp-card-header-left { flex: 1; min-width: 0; }
+.sp-name {
+	font-size: 16px;
+	font-weight: 700;
+	color: #2d3748;
+	margin-bottom: 4px;
+}
+.sp-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	font-size: 12px;
+	color: #718096;
+}
+
+.sp-card-header-right {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 8px;
+	flex-shrink: 0;
+}
+.sp-card-amounts {
+	display: flex;
+	gap: 24px;
+	align-items: flex-end;
+}
+.sp-amt-block { text-align: right; }
+.sp-amt-lbl { font-size: 10px; color: #a0aec0; text-transform: uppercase; letter-spacing: .4px; }
+.sp-amt-val { font-size: 14px; font-weight: 700; color: #2d3748; }
+
+/* Share bar */
+.sp-share-bar-wrap {
+	width: 200px;
+	height: 4px;
+	background: #edf2f7;
+	border-radius: 2px;
+	overflow: hidden;
+}
+.sp-share-bar {
+	height: 100%;
+	border-radius: 2px;
+	transition: width .3s;
+}
+
+/* Chevron toggle */
+.sp-chevron {
+	font-size: 11px;
+	color: #a0aec0;
+	transition: transform .2s;
+	margin-top: 2px;
+}
+.sp-chevron-open { transform: rotate(180deg); }
+
+/* ── Card body ───────────────────────────────────── */
+.sp-card-body {
+	border-top: 1px solid #edf2f7;
+	padding: 16px 20px;
+	background: #fafafa;
+}
+
+/* ── Ageing buckets inside card ──────────────────── */
+.sp-buckets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 18px;
+}
+.sp-bucket {
+	background: #fff;
+	border: 1px solid #e2e8f0;
+	border-radius: 8px;
+	padding: 10px 14px;
+	min-width: 120px;
+	flex: 1;
+}
+.sp-bucket-lbl { font-size: 11px; color: #718096; margin-bottom: 3px; }
+.sp-bucket-val { font-size: 14px; font-weight: 700; }
+
+/* ── Customer list inside card ───────────────────── */
+.sp-cust-section {
+	border-top: 1px solid #edf2f7;
+	padding-top: 14px;
+}
+.sp-cust-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 0;
+	border-bottom: 1px solid #edf2f7;
+}
+.sp-cust-row:last-child { border-bottom: none; }
+.sp-cust-name { font-size: 13px; font-weight: 600; color: #2d3748; }
+.sp-cust-sub  { font-size: 11px; color: #a0aec0; margin-top: 2px; }

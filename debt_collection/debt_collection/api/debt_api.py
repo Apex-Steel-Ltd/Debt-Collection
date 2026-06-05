@@ -595,6 +595,130 @@ def get_sales_persons():
 
 
 @frappe.whitelist()
+def get_salesperson_dashboard(ageing_filter=None):
+	"""
+	Returns per-sales-person outstanding summary:
+	  - total outstanding, PDC, net outstanding, interest loss
+	  - ageing buckets
+	  - top customers list per salesperson
+	ageing_filter: 'over_120'|'over_90'|'over_60'|'over_30'|'current'|None
+	"""
+	today = getdate(nowdate())
+
+	ageing_map = {"over_120": 120, "over_90": 90, "over_60": 60, "over_30": 30}
+	ageing_condition = ""
+	ageing_params = []
+
+	if ageing_filter == "current":
+		ageing_condition = " AND DATEDIFF(%s, si.due_date) <= 0"
+		ageing_params = [today]
+	elif ageing_filter in ageing_map:
+		days = ageing_map[ageing_filter]
+		ageing_condition = f" AND DATEDIFF(%s, si.due_date) > {days}"
+		ageing_params = [today]
+
+	# ── Per salesperson totals ───────────────────────────────────────────────
+	sp_rows = frappe.db.sql(f"""
+		SELECT
+			st.sales_person,
+			COUNT(DISTINCT si.customer)             AS customer_count,
+			COUNT(si.name)                          AS invoice_count,
+			SUM(si.outstanding_amount)              AS outstanding_amount,
+			SUM(si.grand_total)                     AS total_inv_amount,
+			AVG(GREATEST(DATEDIFF(%s, si.due_date), 0)) AS avg_overdue_days,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) <= 0
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_current,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 1  AND 30
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_30,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 31 AND 60
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_60,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 61 AND 90
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_90,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 91 AND 120
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_120,
+			SUM(CASE WHEN DATEDIFF(%s, si.due_date) > 120
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_over_120,
+			GROUP_CONCAT(DISTINCT si.name ORDER BY si.name SEPARATOR ',') AS invoice_list
+		FROM `tabSales Invoice` si
+		INNER JOIN `tabSales Team` st ON (
+			st.parent = si.customer AND st.parenttype = 'Customer'
+		)
+		WHERE si.docstatus = 1
+		  AND si.outstanding_amount > 0
+		  {ageing_condition}
+		GROUP BY st.sales_person
+		ORDER BY SUM(si.outstanding_amount) DESC
+	""", [today, today, today, today, today, today, today] + ageing_params, as_dict=True)
+
+	# ── Bulk PDC for all invoices ────────────────────────────────────────────
+	all_invoices = []
+	for r in sp_rows:
+		if r.invoice_list:
+			all_invoices.extend(r.invoice_list.split(","))
+	pdc_map = _get_pdc_for_invoices(all_invoices) if all_invoices else {}
+
+	# ── Top customers per salesperson (up to 5) ──────────────────────────────
+	sp_names = [r.sales_person for r in sp_rows]
+	top_customers_map = {}
+	if sp_names:
+		ph = ", ".join(["%s"] * len(sp_names))
+		cust_rows = frappe.db.sql(f"""
+			SELECT
+				st.sales_person,
+				si.customer,
+				si.customer_name,
+				SUM(si.outstanding_amount) AS outstanding_amount,
+				COUNT(si.name)             AS invoice_count
+			FROM `tabSales Invoice` si
+			INNER JOIN `tabSales Team` st ON (
+				st.parent = si.customer AND st.parenttype = 'Customer'
+			)
+			WHERE si.docstatus = 1
+			  AND si.outstanding_amount > 0
+			  AND st.sales_person IN ({ph})
+			  {ageing_condition}
+			GROUP BY st.sales_person, si.customer
+			ORDER BY st.sales_person, SUM(si.outstanding_amount) DESC
+		""", sp_names + ageing_params, as_dict=True)
+
+		for cr in cust_rows:
+			sp = cr.sales_person
+			if sp not in top_customers_map:
+				top_customers_map[sp] = []
+			if len(top_customers_map[sp]) < 5:
+				top_customers_map[sp].append({
+					"customer": cr.customer,
+					"customer_name": cr.customer_name,
+					"outstanding_amount": flt(cr.outstanding_amount),
+					"invoice_count": cr.invoice_count,
+				})
+
+	# ── Enrich totals ────────────────────────────────────────────────────────
+	for r in sp_rows:
+		pdc_total = 0
+		if r.invoice_list:
+			for inv in r.invoice_list.split(","):
+				pdc_total += flt(pdc_map.get(inv, {}).get("pdc_amount", 0))
+		r.pdc_amount = pdc_total
+		r.net_outstanding = flt(r.outstanding_amount) - pdc_total
+		r.interest_loss = flt(r.outstanding_amount) * INTEREST_RATE * (flt(r.avg_overdue_days) / 365)
+		r.top_customers = top_customers_map.get(r.sales_person, [])
+		r.pop("invoice_list", None)
+
+	# ── Grand totals ─────────────────────────────────────────────────────────
+	grand = {
+		"outstanding_amount": sum(flt(r.outstanding_amount) for r in sp_rows),
+		"pdc_amount":         sum(flt(r.pdc_amount)         for r in sp_rows),
+		"net_outstanding":    sum(flt(r.net_outstanding)     for r in sp_rows),
+		"interest_loss":      sum(flt(r.interest_loss)       for r in sp_rows),
+		"customer_count":     sum(r.customer_count           for r in sp_rows),
+		"invoice_count":      sum(r.invoice_count            for r in sp_rows),
+	}
+
+	return {"data": sp_rows, "grand": grand}
+
+
+@frappe.whitelist()
 def get_follow_up_report(search=None, collector=None, start_date=None, end_date=None, page=1, page_size=50):
 	"""Returns paginated follow-up log for the Follow-Up Report screen."""
 	conditions = ["1=1"]
