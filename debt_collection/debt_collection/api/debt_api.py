@@ -69,7 +69,7 @@ def _get_pdc_for_invoices(invoice_names):
 
 
 @frappe.whitelist()
-def get_outstanding_customers(ageing_filter=None, collector=None, search=None, page=1, page_size=50):
+def get_outstanding_customers(ageing_filter=None, collector=None, sales_person=None, search=None, page=1, page_size=50):
 	"""
 	Returns aggregated outstanding customer data for the Outstanding Invoices dashboard.
 	ageing_filter: 'over_120' | 'over_90' | 'over_60' | 'over_30' | 'current' | None (all)
@@ -93,6 +93,17 @@ def get_outstanding_customers(ageing_filter=None, collector=None, search=None, p
 	if collector:
 		conditions.append("c.custom_debt_collector = %s")
 		params.append(collector)
+
+	if sales_person:
+		conditions.append("""
+			EXISTS (
+				SELECT 1 FROM `tabSales Team` st
+				WHERE st.parent = si.customer
+				  AND st.parenttype = 'Customer'
+				  AND st.sales_person = %s
+			)
+		""")
+		params.append(sales_person)
 
 	if search:
 		conditions.append("(si.customer LIKE %s OR si.customer_name LIKE %s)")
@@ -136,7 +147,19 @@ def get_outstanding_customers(ageing_filter=None, collector=None, search=None, p
 
 	pdc_map = _get_pdc_for_invoices(all_invoices) if all_invoices else {}
 
-	# Per-customer PDC aggregation
+	# Bulk-fetch sales persons for all customers on this page
+	customers_on_page = [row.customer for row in data if row.customer]
+	sp_map = {}
+	if customers_on_page:
+		ph = ", ".join(["%s"] * len(customers_on_page))
+		sp_rows = frappe.db.sql(f"""
+			SELECT parent AS customer, sales_person
+			FROM `tabSales Team`
+			WHERE parenttype = 'Customer' AND parent IN ({ph})
+		""", customers_on_page, as_dict=True)
+		sp_map = {r.customer: r.sales_person for r in sp_rows}
+
+	# Per-customer PDC aggregation + enrichment
 	for row in data:
 		pdc_total = 0
 		if row.invoice_list:
@@ -145,6 +168,7 @@ def get_outstanding_customers(ageing_filter=None, collector=None, search=None, p
 		row.pdc_amount = pdc_total
 		row.net_outstanding = flt(row.outstanding_amount) - pdc_total
 		row.interest_loss = flt(row.outstanding_amount) * INTEREST_RATE * (flt(row.avg_overdue_days) / 365)
+		row.sales_person = sp_map.get(row.customer, "")
 		row.pop("invoice_list", None)
 
 	return {"data": data, "total": total}

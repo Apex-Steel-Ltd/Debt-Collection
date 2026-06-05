@@ -36,6 +36,23 @@ class OutstandingInvoicesPage {
 			options: "User",
 			change: () => { this.current_page = 1; this.load(); },
 		});
+		this.$sales_person = this.page.add_field({
+			fieldtype: "Select",
+			fieldname: "sales_person",
+			label: "Sales Person",
+			options: "",
+			change: () => { this.current_page = 1; this.load(); },
+		});
+
+		// Populate sales person dropdown
+		frappe.call({
+			method: "debt_collection.debt_collection.api.debt_api.get_sales_persons",
+			callback: (r) => {
+				if (!r.message) return;
+				this.$sales_person.df.options = ["", ...r.message].join("\n");
+				this.$sales_person.refresh();
+			},
+		});
 	}
 
 	render_layout() {
@@ -92,11 +109,13 @@ class OutstandingInvoicesPage {
 	load() {
 		const search = this.$search ? this.$search.get_value() : "";
 		const collector = this.$collector ? this.$collector.get_value() : "";
+		const sales_person = this.$sales_person ? this.$sales_person.get_value() : "";
 		frappe.call({
 			method: "debt_collection.debt_collection.api.debt_api.get_outstanding_customers",
 			args: {
 				ageing_filter: this.current_filter === "all" ? null : this.current_filter,
 				collector: collector || null,
+				sales_person: sales_person || null,
 				search: search || null,
 				page: this.current_page,
 				page_size: this.page_size,
@@ -118,6 +137,7 @@ class OutstandingInvoicesPage {
 					<button class="dc-link-btn oi-view-btn" data-customer="${r.customer}">${r.customer_name || r.customer}</button>
 					${r.debt_collector ? `<span class="dc-badge-blue" style="margin-left:6px;">Planned</span>` : ""}
 				</td>
+				<td style="color:#553c9a;font-size:12px;">${r.sales_person || "—"}</td>
 				<td>${fmt(r.total_inv_amount)}</td>
 				<td style="font-weight:600;">${fmt(r.outstanding_amount)}</td>
 				<td>${fmt(r.pdc_amount)}</td>
@@ -133,6 +153,7 @@ class OutstandingInvoicesPage {
 					<tr>
 						<th><input type="checkbox" id="oi-select-all"></th>
 						<th>Name</th>
+						<th>Sales Person</th>
 						<th>Total Inv Amount</th>
 						<th>Outstanding Amount ↓</th>
 						<th>PDC Amount</th>
@@ -141,7 +162,7 @@ class OutstandingInvoicesPage {
 						<th>14% Interest Loss</th>
 					</tr>
 				</thead>
-				<tbody>${row_html || '<tr><td colspan="8" style="text-align:center;color:#a0aec0;padding:32px;">No outstanding invoices found.</td></tr>'}</tbody>
+				<tbody>${row_html || '<tr><td colspan="9" style="text-align:center;color:#a0aec0;padding:32px;">No outstanding invoices found.</td></tr>'}</tbody>
 			</table>
 		`);
 	}
