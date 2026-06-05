@@ -112,7 +112,7 @@ def get_outstanding_customers(ageing_filter=None, collector=None, search=None, p
 		FROM `tabSales Invoice` si
 		LEFT JOIN `tabCustomer` c ON c.name = si.customer
 		WHERE {where_clause}
-	""", [today] + params, as_dict=True)
+	""", params, as_dict=True)
 	total = count_row[0].total if count_row else 0
 
 	# Enrich with PDC data
