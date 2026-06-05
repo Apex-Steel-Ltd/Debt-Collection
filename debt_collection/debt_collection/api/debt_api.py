@@ -27,6 +27,19 @@ def _get_sales_person_for_invoice(invoice_name, customer):
 	return sp or ""
 
 
+def _get_sales_person_for_customer(customer):
+	"""
+	Fetch sales person for a customer from Customer sales_team child.
+	Safe to call without an invoice name.
+	"""
+	sp = frappe.db.get_value(
+		"Sales Team",
+		{"parent": customer, "parenttype": "Customer"},
+		"sales_person"
+	)
+	return sp or ""
+
+
 def _get_pdc_for_invoices(invoice_names):
 	"""
 	Returns dict: {invoice_name: {"pdc_amount": x, "pdc_date": y}}
@@ -396,11 +409,13 @@ def _get_customer_stats(customer):
 
 
 @frappe.whitelist()
-def get_follow_up_dashboard(collector=None, week_start=None, page=1, page_size=20):
+def get_follow_up_dashboard(collector=None, sales_person=None, customer=None, week_start=None, page=1, page_size=20):
 	"""
 	Returns follow-up records grouped by ISO week, with summary stats per week
 	and per-row customer outstanding totals.
 	week_start: ISO date (Monday) to filter to a single week; None = all weeks.
+	sales_person: filter by sales person linked to the customer
+	customer: filter by specific customer
 	"""
 	conditions = ["1=1"]
 	params = []
@@ -408,6 +423,26 @@ def get_follow_up_dashboard(collector=None, week_start=None, page=1, page_size=2
 	if collector:
 		conditions.append("cfu.collector = %s")
 		params.append(collector)
+	if customer:
+		conditions.append("cfu.customer = %s")
+		params.append(customer)
+	if sales_person:
+		# Sales person can be linked to customer OR invoice (for CASH CUSTOMER)
+		conditions.append("""
+			EXISTS (
+				SELECT 1 FROM `tabSales Team` st
+				WHERE (
+					(st.parent = cfu.customer AND st.parenttype = 'Customer' AND st.sales_person = %s)
+					OR
+					(st.parenttype = 'Sales Invoice' AND st.sales_person = %s
+					 AND EXISTS (
+						SELECT 1 FROM `tabCollection Follow Up Invoice` cfui
+						WHERE cfui.parent = cfu.name AND cfui.sales_invoice = st.parent
+					 ))
+				)
+			)
+		""")
+		params += [sales_person, sales_person]
 	if week_start:
 		# week_start is Monday; end is Sunday
 		conditions.append("DATE(cfu.creation) >= %s AND DATE(cfu.creation) <= %s")
@@ -447,7 +482,7 @@ def get_follow_up_dashboard(collector=None, week_start=None, page=1, page_size=2
 		SELECT COUNT(*) AS cnt FROM `tabCollection Follow Up` cfu WHERE {where}
 	""", params, as_dict=True)[0].cnt
 
-	# Enrich each row with current outstanding for the customer
+	# Enrich each row with current outstanding for the customer AND sales person
 	customers = list({r.customer for r in rows if r.customer})
 	outstanding_map = {}
 	if customers:
@@ -463,6 +498,8 @@ def get_follow_up_dashboard(collector=None, week_start=None, page=1, page_size=2
 	for r in rows:
 		r.current_outstanding = outstanding_map.get(r.customer, 0)
 		r.week_label = str(r.week_monday) if r.week_monday else "-"
+		# Get sales person for this customer
+		r.sales_person = _get_sales_person_for_customer(r.customer) if r.customer else ""
 
 	# Build week-level summary (across the returned page)
 	week_summary = {}
@@ -518,6 +555,19 @@ def get_collectors():
 		ORDER BY u.full_name
 	""", as_dict=True)
 	return rows
+
+
+@frappe.whitelist()
+def get_sales_persons():
+	"""Return all distinct sales persons linked to customers."""
+	rows = frappe.db.sql("""
+		SELECT DISTINCT st.sales_person
+		FROM `tabSales Team` st
+		WHERE st.parenttype = 'Customer'
+		  AND st.sales_person IS NOT NULL
+		ORDER BY st.sales_person
+	""", as_dict=True)
+	return [r.sales_person for r in rows]
 
 
 @frappe.whitelist()
