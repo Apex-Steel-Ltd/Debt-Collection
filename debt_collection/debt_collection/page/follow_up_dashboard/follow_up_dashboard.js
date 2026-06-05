@@ -42,6 +42,33 @@ class CollectionFollowUpDashboard {
 			change: () => { this.current_page = 1; this.load(); },
 		});
 
+		this.$customer = this.page.add_field({
+			fieldtype: "Link",
+			fieldname: "customer",
+			label: "Customer",
+			options: "Customer",
+			change: () => { this.current_page = 1; this.load(); },
+		});
+
+		this.$sales_person = this.page.add_field({
+			fieldtype: "Select",
+			fieldname: "sales_person",
+			label: "Sales Person",
+			options: "",
+			change: () => { this.current_page = 1; this.load(); },
+		});
+
+		// Populate sales person dropdown
+		frappe.call({
+			method: "debt_collection.debt_collection.api.debt_api.get_sales_persons",
+			callback: (r) => {
+				if (!r.message) return;
+				const options = ["", ...r.message].join("\n");
+				this.$sales_person.df.options = options;
+				this.$sales_person.refresh();
+			},
+		});
+
 		this.$week = this.page.add_field({
 			fieldtype: "Date",
 			fieldname: "week_start",
@@ -69,13 +96,17 @@ class CollectionFollowUpDashboard {
 	// ── Load data ─────────────────────────────────────────────────────────────
 	load() {
 		const collector = this.$collector ? this.$collector.get_value() : null;
+		const customer  = this.$customer  ? this.$customer.get_value()  : null;
+		const sales_person = this.$sales_person ? this.$sales_person.get_value() : null;
 		frappe.call({
 			method: "debt_collection.debt_collection.api.debt_api.get_follow_up_dashboard",
 			args: {
-				collector: collector || null,
-				week_start: this.week_filter || null,
-				page: this.current_page,
-				page_size: this.page_size,
+				collector:    collector    || null,
+				customer:     customer     || null,
+				sales_person: sales_person || null,
+				week_start:   this.week_filter || null,
+				page:         this.current_page,
+				page_size:    this.page_size,
 			},
 			callback: (r) => {
 				if (!r.message) return;
@@ -152,12 +183,16 @@ class CollectionFollowUpDashboard {
 			const next_date = r.next_follow_up_date
 				? `<span style="color:#d69e2e;font-size:11px;">📅 Next: ${frappe.datetime.str_to_user(r.next_follow_up_date)}</span>`
 				: "";
+			const sp_tag = r.sales_person
+				? `<span style="background:#e9d8fd;color:#553c9a;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">👤 ${r.sales_person}</span>`
+				: "";
 			return `
 				<div class="dc-cfu-row" data-name="${r.name}">
 					<div class="dc-cfu-row-left">
 						<div class="dc-cfu-customer">${r.customer_name || r.customer}</div>
 						<div class="dc-cfu-meta">
 							${method_badge}
+							${sp_tag}
 							<span style="color:#718096;font-size:12px;">${r.collector_name || r.collector || ""}</span>
 							<span style="color:#a0aec0;font-size:11px;">${frappe.datetime.str_to_user(r.created_date)}</span>
 							${next_date}
@@ -210,6 +245,10 @@ class CollectionFollowUpDashboard {
 								<div style="font-size:11px;color:#718096;text-transform:uppercase;">Customer</div>
 								<div style="font-weight:700;font-size:14px;">${row.customer_name || row.customer}</div>
 								<div style="font-size:12px;color:#718096;">${row.customer}</div>
+							</div>
+							<div>
+								<div style="font-size:11px;color:#718096;text-transform:uppercase;">Sales Person</div>
+								<div style="font-weight:600;font-size:13px;color:#553c9a;">${row.sales_person || "—"}</div>
 							</div>
 							<div>
 								<div style="font-size:11px;color:#718096;text-transform:uppercase;">Current Outstanding</div>
