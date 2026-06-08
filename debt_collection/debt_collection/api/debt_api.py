@@ -681,7 +681,10 @@ def get_sales_persons():
 def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 	"""
 	Returns per-sales-person outstanding summary.
-	sales_person: optional — return only this salesperson's card.
+	Fixes:
+	 1. One sales person per customer — customer master takes priority over invoice level.
+	    Uses a correlated subquery (not UNION) to prevent double-counting.
+	 2. PDC fetched per-salesperson via a direct JOIN, not GROUP_CONCAT (avoids truncation).
 	"""
 	today = getdate(nowdate())
 
@@ -700,18 +703,19 @@ def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 	sp_filter_condition = ""
 	sp_filter_params = []
 	if sales_person:
-		sp_filter_condition = " AND sp_source.sales_person = %s"
+		sp_filter_condition = " AND resolved_sp.sales_person = %s"
 		sp_filter_params = [sales_person]
 
-	# ── Per salesperson totals ───────────────────────────────────────────────
-	# Resolve sales person: Customer master first, then invoice-level fallback
+	# ── Step 1: resolve ONE sales person per customer ──────────────────────────
+	# Inline subquery: customer-level wins; invoice-level is fallback only.
+	# COALESCE picks the first non-null value. We use a correlated subquery so
+	# each customer maps to exactly one sales person → no double-counting.
 	sp_rows = frappe.db.sql(f"""
 		SELECT
-			sp_source.sales_person,
+			resolved_sp.sales_person,
 			COUNT(DISTINCT si.customer)             AS customer_count,
 			COUNT(si.name)                          AS invoice_count,
 			SUM(si.outstanding_amount)              AS outstanding_amount,
-			SUM(si.grand_total)                     AS total_inv_amount,
 			AVG(GREATEST(DATEDIFF(%s, si.due_date), 0)) AS avg_overdue_days,
 			SUM(CASE WHEN DATEDIFF(%s, si.due_date) <= 0
 			         THEN si.outstanding_amount ELSE 0 END) AS bucket_current,
@@ -724,111 +728,140 @@ def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 			SUM(CASE WHEN DATEDIFF(%s, si.due_date) BETWEEN 91 AND 120
 			         THEN si.outstanding_amount ELSE 0 END) AS bucket_120,
 			SUM(CASE WHEN DATEDIFF(%s, si.due_date) > 120
-			         THEN si.outstanding_amount ELSE 0 END) AS bucket_over_120,
-			GROUP_CONCAT(DISTINCT si.name ORDER BY si.name SEPARATOR ',') AS invoice_list
+			         THEN si.outstanding_amount ELSE 0 END) AS bucket_over_120
 		FROM `tabSales Invoice` si
 		INNER JOIN (
-			/* Priority 1: sales person from Customer master */
-			SELECT c.name AS customer, st_c.sales_person
+			/* One row per customer: customer-master SP, or first invoice-level SP as fallback */
+			SELECT
+				c.name AS customer,
+				COALESCE(
+					/* Customer-level (first match) */
+					(SELECT st_c.sales_person
+					 FROM `tabSales Team` st_c
+					 WHERE st_c.parent = c.name
+					   AND st_c.parenttype = 'Customer'
+					   AND st_c.sales_person IS NOT NULL
+					   AND st_c.sales_person != ''
+					 LIMIT 1),
+					/* Invoice-level fallback */
+					(SELECT st_i.sales_person
+					 FROM `tabSales Team` st_i
+					 INNER JOIN `tabSales Invoice` si_fb
+					     ON si_fb.name = st_i.parent
+					 WHERE si_fb.customer = c.name
+					   AND st_i.parenttype = 'Sales Invoice'
+					   AND st_i.sales_person IS NOT NULL
+					   AND st_i.sales_person != ''
+					   AND si_fb.docstatus = 1
+					 LIMIT 1)
+				) AS sales_person
 			FROM `tabCustomer` c
-			INNER JOIN `tabSales Team` st_c ON st_c.parent = c.name
-				AND st_c.parenttype = 'Customer'
-				AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
-			UNION
-			/* Priority 2: sales person from Invoice (only for customers with no customer-level SP) */
-			SELECT si2.customer, st_i.sales_person
-			FROM `tabSales Invoice` si2
-			INNER JOIN `tabSales Team` st_i ON st_i.parent = si2.name
-				AND st_i.parenttype = 'Sales Invoice'
-				AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
-			WHERE si2.docstatus = 1
-			  AND NOT EXISTS (
-				SELECT 1 FROM `tabSales Team` st_c2
-				WHERE st_c2.parent = si2.customer
-				  AND st_c2.parenttype = 'Customer'
-				  AND st_c2.sales_person IS NOT NULL AND st_c2.sales_person != ''
-			  )
-		) sp_source ON sp_source.customer = si.customer
+		) resolved_sp ON resolved_sp.customer = si.customer
+			AND resolved_sp.sales_person IS NOT NULL
 		WHERE si.docstatus = 1
 		  AND si.outstanding_amount > 0
 		  {ageing_condition}
 		  {sp_filter_condition}
-		GROUP BY sp_source.sales_person
+		GROUP BY resolved_sp.sales_person
 		ORDER BY SUM(si.outstanding_amount) DESC
 	""", [today, today, today, today, today, today, today] + ageing_params + sp_filter_params, as_dict=True)
 
-	# ── Bulk PDC for all invoices ────────────────────────────────────────────
-	all_invoices = []
-	for r in sp_rows:
-		if r.invoice_list:
-			all_invoices.extend(r.invoice_list.split(","))
-	pdc_map = _get_pdc_for_invoices(all_invoices) if all_invoices else {}
-
-	# ── Top customers per salesperson (up to 5) ──────────────────────────────
+	# ── Step 2: PDC per salesperson — direct aggregation, no GROUP_CONCAT ─────
+	# Join Payment Entry Reference → Sales Invoice → resolved_sp
+	# This avoids the GROUP_CONCAT length limit entirely.
 	sp_names = [r.sales_person for r in sp_rows]
+	pdc_map = {}  # {sales_person: pdc_amount}
+	if sp_names:
+		ph = ", ".join(["%s"] * len(sp_names))
+		pdc_rows = frappe.db.sql(f"""
+			SELECT
+				resolved_sp.sales_person,
+				SUM(per.allocated_amount) AS pdc_amount
+			FROM `tabPayment Entry Reference` per
+			INNER JOIN `tabPayment Entry` pe ON pe.name = per.parent
+			INNER JOIN `tabSales Invoice` si ON si.name = per.reference_name
+			INNER JOIN (
+				SELECT
+					c.name AS customer,
+					COALESCE(
+						(SELECT st_c.sales_person FROM `tabSales Team` st_c
+						 WHERE st_c.parent = c.name AND st_c.parenttype = 'Customer'
+						   AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
+						 LIMIT 1),
+						(SELECT st_i.sales_person FROM `tabSales Team` st_i
+						 INNER JOIN `tabSales Invoice` si_fb ON si_fb.name = st_i.parent
+						 WHERE si_fb.customer = c.name AND st_i.parenttype = 'Sales Invoice'
+						   AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
+						   AND si_fb.docstatus = 1
+						 LIMIT 1)
+					) AS sales_person
+				FROM `tabCustomer` c
+			) resolved_sp ON resolved_sp.customer = si.customer
+			WHERE per.reference_doctype = 'Sales Invoice'
+			  AND pe.docstatus = 1
+			  AND pe.posting_date > %s
+			  AND pe.payment_type IN ('Receive', 'Pay')
+			  AND resolved_sp.sales_person IN ({ph})
+			GROUP BY resolved_sp.sales_person
+		""", [today] + sp_names, as_dict=True)
+		pdc_map = {r.sales_person: flt(r.pdc_amount) for r in pdc_rows}
+
+	# ── Step 3: Top 5 customers per salesperson ───────────────────────────────
 	top_customers_map = {}
 	if sp_names:
 		ph = ", ".join(["%s"] * len(sp_names))
 		cust_rows = frappe.db.sql(f"""
 			SELECT
-				sp_source.sales_person,
+				resolved_sp.sales_person,
 				si.customer,
 				si.customer_name,
 				SUM(si.outstanding_amount) AS outstanding_amount,
 				COUNT(si.name)             AS invoice_count
 			FROM `tabSales Invoice` si
 			INNER JOIN (
-				SELECT c.name AS customer, st_c.sales_person
+				SELECT
+					c.name AS customer,
+					COALESCE(
+						(SELECT st_c.sales_person FROM `tabSales Team` st_c
+						 WHERE st_c.parent = c.name AND st_c.parenttype = 'Customer'
+						   AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
+						 LIMIT 1),
+						(SELECT st_i.sales_person FROM `tabSales Team` st_i
+						 INNER JOIN `tabSales Invoice` si_fb ON si_fb.name = st_i.parent
+						 WHERE si_fb.customer = c.name AND st_i.parenttype = 'Sales Invoice'
+						   AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
+						   AND si_fb.docstatus = 1
+						 LIMIT 1)
+					) AS sales_person
 				FROM `tabCustomer` c
-				INNER JOIN `tabSales Team` st_c ON st_c.parent = c.name
-					AND st_c.parenttype = 'Customer'
-					AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
-				UNION
-				SELECT si2.customer, st_i.sales_person
-				FROM `tabSales Invoice` si2
-				INNER JOIN `tabSales Team` st_i ON st_i.parent = si2.name
-					AND st_i.parenttype = 'Sales Invoice'
-					AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
-				WHERE si2.docstatus = 1
-				  AND NOT EXISTS (
-					SELECT 1 FROM `tabSales Team` st_c2
-					WHERE st_c2.parent = si2.customer
-					  AND st_c2.parenttype = 'Customer'
-					  AND st_c2.sales_person IS NOT NULL AND st_c2.sales_person != ''
-				  )
-			) sp_source ON sp_source.customer = si.customer
+			) resolved_sp ON resolved_sp.customer = si.customer
 			WHERE si.docstatus = 1
 			  AND si.outstanding_amount > 0
-			  AND sp_source.sales_person IN ({ph})
+			  AND resolved_sp.sales_person IN ({ph})
 			  {ageing_condition}
-			GROUP BY sp_source.sales_person, si.customer
-			ORDER BY sp_source.sales_person, SUM(si.outstanding_amount) DESC
+			GROUP BY resolved_sp.sales_person, si.customer
+			ORDER BY resolved_sp.sales_person, SUM(si.outstanding_amount) DESC
 		""", sp_names + ageing_params, as_dict=True)
+
 		for cr in cust_rows:
 			sp = cr.sales_person
 			if sp not in top_customers_map:
 				top_customers_map[sp] = []
 			if len(top_customers_map[sp]) < 5:
 				top_customers_map[sp].append({
-					"customer": cr.customer,
-					"customer_name": cr.customer_name,
+					"customer":           cr.customer,
+					"customer_name":      cr.customer_name,
 					"outstanding_amount": flt(cr.outstanding_amount),
-					"invoice_count": cr.invoice_count,
+					"invoice_count":      cr.invoice_count,
 				})
 
-	# ── Enrich totals ────────────────────────────────────────────────────────
+	# ── Step 4: Enrich and build grand totals ──────────────────────────────────
 	for r in sp_rows:
-		pdc_total = 0
-		if r.invoice_list:
-			for inv in r.invoice_list.split(","):
-				pdc_total += flt(pdc_map.get(inv, {}).get("pdc_amount", 0))
-		r.pdc_amount = pdc_total
-		r.net_outstanding = flt(r.outstanding_amount) - pdc_total
-		r.interest_loss = flt(r.outstanding_amount) * INTEREST_RATE * (flt(r.avg_overdue_days) / 365)
-		r.top_customers = top_customers_map.get(r.sales_person, [])
-		r.pop("invoice_list", None)
+		r.pdc_amount     = pdc_map.get(r.sales_person, 0)
+		r.net_outstanding = flt(r.outstanding_amount) - r.pdc_amount
+		r.interest_loss  = flt(r.outstanding_amount) * INTEREST_RATE * (flt(r.avg_overdue_days) / 365)
+		r.top_customers  = top_customers_map.get(r.sales_person, [])
 
-	# ── Grand totals ─────────────────────────────────────────────────────────
 	grand = {
 		"outstanding_amount": sum(flt(r.outstanding_amount) for r in sp_rows),
 		"pdc_amount":         sum(flt(r.pdc_amount)         for r in sp_rows),
