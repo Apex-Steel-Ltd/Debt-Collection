@@ -29,34 +29,73 @@ class SalespersonDashboard {
 	_render_skeleton() {
 		$(this.page.body).html(`
 			<div style="padding:20px;">
+
+				<!-- Filter bar -->
+				<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+				            background:#fff;border:1px solid #e2e8f0;border-radius:8px;
+				            padding:12px 16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+					<div>
+						<label style="font-size:11px;color:#718096;margin-bottom:3px;display:block;
+						              text-transform:uppercase;letter-spacing:.4px;">Sales Person</label>
+						<select id="sp-filter-person"
+						        style="height:28px;border:1px solid #cbd5e0;border-radius:4px;
+						               padding:0 8px;font-size:12px;color:#2d3748;
+						               background:#fff;min-width:180px;">
+							<option value="">All Sales Persons</option>
+						</select>
+					</div>
+					<button id="sp-clear-filters"
+					        style="height:28px;padding:0 12px;border:1px solid #cbd5e0;
+					               border-radius:4px;background:#fff;color:#718096;
+					               font-size:12px;cursor:pointer;">
+						Clear
+					</button>
+				</div>
+
+				<!-- Ageing tabs -->
 				<div id="sp-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
 					${["all","over_120","over_90","over_60","over_30","current"].map(f => `
-						<button
-							data-filter="${f}"
-							style="padding:6px 14px;border:1px solid ${f==="all"?"#2b6cb0":"#cbd5e0"};border-radius:20px;
-							       background:${f==="all"?"#2b6cb0":"#fff"};color:${f==="all"?"#fff":"#4a5568"};
-							       font-size:13px;cursor:pointer;font-weight:${f==="all"?600:400};"
-							class="sp-tab"
-						>${this._filter_label(f)}</button>
+						<button data-filter="${f}" class="sp-tab"
+							style="padding:6px 14px;border:1px solid ${f==="all"?"#2b6cb0":"#cbd5e0"};
+							       border-radius:20px;background:${f==="all"?"#2b6cb0":"#fff"};
+							       color:${f==="all"?"#fff":"#4a5568"};font-size:13px;cursor:pointer;
+							       font-weight:${f==="all"?600:400};">
+							${this._filter_label(f)}
+						</button>
 					`).join("")}
 				</div>
+
 				<div id="sp-grand"></div>
 				<div id="sp-cards" style="margin-top:20px;"></div>
 			</div>
 		`);
 
+		// Populate sales person filter
+		frappe.call({
+			method: "debt_collection.debt_collection.api.debt_api.get_sales_persons",
+			callback: (r) => {
+				if (!r.message) return;
+				r.message.forEach(sp => {
+					$("#sp-filter-person").append(`<option value="${sp}">${sp}</option>`);
+				});
+			},
+		});
+
+		$(this.page.body).on("change", "#sp-filter-person", () => this.load());
+		$(this.page.body).on("click", "#sp-clear-filters", () => {
+			$("#sp-filter-person").val("");
+			this.load();
+		});
+
 		$(this.page.body).on("click", ".sp-tab", (e) => {
-			// Reset all tabs
 			$(this.page.body).find(".sp-tab").each((_, el) => {
 				$(el).css({ background: "#fff", color: "#4a5568", borderColor: "#cbd5e0", fontWeight: 400 });
 			});
-			// Activate clicked
 			$(e.currentTarget).css({ background: "#2b6cb0", color: "#fff", borderColor: "#2b6cb0", fontWeight: 600 });
 			this.current_filter = $(e.currentTarget).data("filter");
 			this.load();
 		});
 
-		// Expand/collapse card body
 		$(this.page.body).on("click", ".sp-card-header", (e) => {
 			if ($(e.target).hasClass("sp-view-all")) return;
 			const card = $(e.currentTarget).closest(".sp-card");
@@ -74,9 +113,13 @@ class SalespersonDashboard {
 
 	// ── Load ──────────────────────────────────────────────────────────────────
 	load() {
+		const sales_person = $("#sp-filter-person").val() || null;
 		frappe.call({
 			method: "debt_collection.debt_collection.api.debt_api.get_salesperson_dashboard",
-			args: { ageing_filter: this.current_filter === "all" ? null : this.current_filter },
+			args: {
+				ageing_filter: this.current_filter === "all" ? null : this.current_filter,
+				sales_person,
+			},
 			freeze: true,
 			freeze_message: "Loading...",
 			callback: (r) => {
@@ -137,12 +180,12 @@ class SalespersonDashboard {
 
 			// Ageing buckets
 			const buckets = [
-				{ label: "Current",     val: r.bucket_current,   color: "#38a169" },
-				{ label: "1–30 Days",   val: r.bucket_30,        color: "#68d391" },
-				{ label: "31–60 Days",  val: r.bucket_60,        color: "#d69e2e" },
-				{ label: "61–90 Days",  val: r.bucket_90,        color: "#dd6b20" },
-				{ label: "91–120 Days", val: r.bucket_120,       color: "#e53e3e" },
-				{ label: ">120 Days",   val: r.bucket_over_120,  color: "#9b2c2c" },
+				{ label: "Current (Not yet due)", val: r.bucket_current,   color: "#38a169" },
+				{ label: "1–30 Days",             val: r.bucket_30,        color: "#68d391" },
+				{ label: "31–60 Days",            val: r.bucket_60,        color: "#d69e2e" },
+				{ label: "61–90 Days",            val: r.bucket_90,        color: "#dd6b20" },
+				{ label: "91–120 Days",           val: r.bucket_120,       color: "#e53e3e" },
+				{ label: ">120 Days",             val: r.bucket_over_120,  color: "#9b2c2c" },
 			];
 			const bucket_html = `
 				<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
@@ -248,8 +291,12 @@ class SalespersonDashboard {
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	_filter_label(f) {
 		return {
-			all: "All", over_120: "Over 120 Days", over_90: "Over 90 Days",
-			over_60: "Over 60 Days", over_30: "Over 30 Days", current: "Current",
+			all: "All",
+			over_120: "Over 120 Days",
+			over_90: "Over 90 Days",
+			over_60: "Over 60 Days",
+			over_30: "Over 30 Days",
+			current: "Current (Not yet due)",
 		}[f];
 	}
 }

@@ -148,16 +148,37 @@ def get_outstanding_customers(ageing_filter=None, collector=None, sales_person=N
 	pdc_map = _get_pdc_for_invoices(all_invoices) if all_invoices else {}
 
 	# Bulk-fetch sales persons for all customers on this page
+	# Priority: Customer sales team → fallback to any invoice sales team for that customer
 	customers_on_page = [row.customer for row in data if row.customer]
 	sp_map = {}
 	if customers_on_page:
 		ph = ", ".join(["%s"] * len(customers_on_page))
+		# Customer-level sales team
 		sp_rows = frappe.db.sql(f"""
 			SELECT parent AS customer, sales_person
 			FROM `tabSales Team`
 			WHERE parenttype = 'Customer' AND parent IN ({ph})
+			  AND sales_person IS NOT NULL AND sales_person != ''
 		""", customers_on_page, as_dict=True)
 		sp_map = {r.customer: r.sales_person for r in sp_rows}
+
+		# Fallback: invoice-level sales team for customers still missing
+		missing = [c for c in customers_on_page if not sp_map.get(c)]
+		if missing:
+			ph2 = ", ".join(["%s"] * len(missing))
+			fallback_rows = frappe.db.sql(f"""
+				SELECT si.customer, st.sales_person
+				FROM `tabSales Invoice` si
+				INNER JOIN `tabSales Team` st ON st.parent = si.name
+					AND st.parenttype = 'Sales Invoice'
+				WHERE si.customer IN ({ph2})
+				  AND si.docstatus = 1
+				  AND st.sales_person IS NOT NULL AND st.sales_person != ''
+				GROUP BY si.customer
+			""", missing, as_dict=True)
+			for r in fallback_rows:
+				if not sp_map.get(r.customer):
+					sp_map[r.customer] = r.sales_person
 
 	# Per-customer PDC aggregation + enrichment
 	for row in data:
@@ -569,6 +590,68 @@ def update_follow_up(name, contact_method, remarks, next_follow_up_date=None,
 
 
 @frappe.whitelist()
+def get_active_plans():
+	"""
+	Returns all Weekly Collection Plans with status = Open,
+	enriched with per-plan customer stats and totals.
+	"""
+	plans = frappe.db.sql("""
+		SELECT
+			wcp.name,
+			wcp.start_date,
+			wcp.end_date,
+			wcp.status,
+			wcp.creation,
+			COUNT(wcpc.name)                      AS customer_count,
+			SUM(wcpc.outstanding_amount)          AS total_outstanding,
+			SUM(wcpc.pdc_amount)                  AS total_pdc,
+			SUM(wcpc.net_outstanding)             AS total_net_outstanding,
+			SUM(wcpc.avg_overdue_days * 1)        AS sum_overdue,
+			SUM(CASE WHEN wcpc.status = 'Planned'   THEN 1 ELSE 0 END) AS count_planned,
+			SUM(CASE WHEN wcpc.status = 'Completed' THEN 1 ELSE 0 END) AS count_completed,
+			SUM(CASE WHEN wcpc.status = 'Skipped'   THEN 1 ELSE 0 END) AS count_skipped
+		FROM `tabWeekly Collection Plan` wcp
+		LEFT JOIN `tabWeekly Collection Plan Customer` wcpc ON wcpc.parent = wcp.name
+		WHERE wcp.status = 'Open'
+		GROUP BY wcp.name
+		ORDER BY wcp.start_date DESC
+	""", as_dict=True)
+
+	# Fetch customer rows per plan
+	plan_names = [p.name for p in plans]
+	customers_map = {}
+	if plan_names:
+		ph = ", ".join(["%s"] * len(plan_names))
+		cust_rows = frappe.db.sql(f"""
+			SELECT
+				parent AS plan,
+				customer,
+				customer_name,
+				sales_representative,
+				debt_collector,
+				outstanding_amount,
+				pdc_amount,
+				net_outstanding,
+				avg_overdue_days,
+				planner_invoices,
+				status
+			FROM `tabWeekly Collection Plan Customer`
+			WHERE parent IN ({ph})
+			ORDER BY outstanding_amount DESC
+		""", plan_names, as_dict=True)
+		for cr in cust_rows:
+			customers_map.setdefault(cr.plan, []).append(cr)
+
+	for p in plans:
+		p.customers = customers_map.get(p.name, [])
+		p.avg_overdue_days = (
+			flt(p.sum_overdue) / p.customer_count if p.customer_count else 0
+		)
+
+	return plans
+
+
+@frappe.whitelist()
 def get_collectors():
 	"""Return all users assigned as debt collector on any customer."""
 	rows = frappe.db.sql("""
@@ -595,13 +678,10 @@ def get_sales_persons():
 
 
 @frappe.whitelist()
-def get_salesperson_dashboard(ageing_filter=None):
+def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 	"""
-	Returns per-sales-person outstanding summary:
-	  - total outstanding, PDC, net outstanding, interest loss
-	  - ageing buckets
-	  - top customers list per salesperson
-	ageing_filter: 'over_120'|'over_90'|'over_60'|'over_30'|'current'|None
+	Returns per-sales-person outstanding summary.
+	sales_person: optional — return only this salesperson's card.
 	"""
 	today = getdate(nowdate())
 
@@ -617,10 +697,17 @@ def get_salesperson_dashboard(ageing_filter=None):
 		ageing_condition = f" AND DATEDIFF(%s, si.due_date) > {days}"
 		ageing_params = [today]
 
+	sp_filter_condition = ""
+	sp_filter_params = []
+	if sales_person:
+		sp_filter_condition = " AND sp_source.sales_person = %s"
+		sp_filter_params = [sales_person]
+
 	# ── Per salesperson totals ───────────────────────────────────────────────
+	# Resolve sales person: Customer master first, then invoice-level fallback
 	sp_rows = frappe.db.sql(f"""
 		SELECT
-			st.sales_person,
+			sp_source.sales_person,
 			COUNT(DISTINCT si.customer)             AS customer_count,
 			COUNT(si.name)                          AS invoice_count,
 			SUM(si.outstanding_amount)              AS outstanding_amount,
@@ -640,15 +727,35 @@ def get_salesperson_dashboard(ageing_filter=None):
 			         THEN si.outstanding_amount ELSE 0 END) AS bucket_over_120,
 			GROUP_CONCAT(DISTINCT si.name ORDER BY si.name SEPARATOR ',') AS invoice_list
 		FROM `tabSales Invoice` si
-		INNER JOIN `tabSales Team` st ON (
-			st.parent = si.customer AND st.parenttype = 'Customer'
-		)
+		INNER JOIN (
+			/* Priority 1: sales person from Customer master */
+			SELECT c.name AS customer, st_c.sales_person
+			FROM `tabCustomer` c
+			INNER JOIN `tabSales Team` st_c ON st_c.parent = c.name
+				AND st_c.parenttype = 'Customer'
+				AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
+			UNION
+			/* Priority 2: sales person from Invoice (only for customers with no customer-level SP) */
+			SELECT si2.customer, st_i.sales_person
+			FROM `tabSales Invoice` si2
+			INNER JOIN `tabSales Team` st_i ON st_i.parent = si2.name
+				AND st_i.parenttype = 'Sales Invoice'
+				AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
+			WHERE si2.docstatus = 1
+			  AND NOT EXISTS (
+				SELECT 1 FROM `tabSales Team` st_c2
+				WHERE st_c2.parent = si2.customer
+				  AND st_c2.parenttype = 'Customer'
+				  AND st_c2.sales_person IS NOT NULL AND st_c2.sales_person != ''
+			  )
+		) sp_source ON sp_source.customer = si.customer
 		WHERE si.docstatus = 1
 		  AND si.outstanding_amount > 0
 		  {ageing_condition}
-		GROUP BY st.sales_person
+		  {sp_filter_condition}
+		GROUP BY sp_source.sales_person
 		ORDER BY SUM(si.outstanding_amount) DESC
-	""", [today, today, today, today, today, today, today] + ageing_params, as_dict=True)
+	""", [today, today, today, today, today, today, today] + ageing_params + sp_filter_params, as_dict=True)
 
 	# ── Bulk PDC for all invoices ────────────────────────────────────────────
 	all_invoices = []
@@ -664,23 +771,39 @@ def get_salesperson_dashboard(ageing_filter=None):
 		ph = ", ".join(["%s"] * len(sp_names))
 		cust_rows = frappe.db.sql(f"""
 			SELECT
-				st.sales_person,
+				sp_source.sales_person,
 				si.customer,
 				si.customer_name,
 				SUM(si.outstanding_amount) AS outstanding_amount,
 				COUNT(si.name)             AS invoice_count
 			FROM `tabSales Invoice` si
-			INNER JOIN `tabSales Team` st ON (
-				st.parent = si.customer AND st.parenttype = 'Customer'
-			)
+			INNER JOIN (
+				SELECT c.name AS customer, st_c.sales_person
+				FROM `tabCustomer` c
+				INNER JOIN `tabSales Team` st_c ON st_c.parent = c.name
+					AND st_c.parenttype = 'Customer'
+					AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
+				UNION
+				SELECT si2.customer, st_i.sales_person
+				FROM `tabSales Invoice` si2
+				INNER JOIN `tabSales Team` st_i ON st_i.parent = si2.name
+					AND st_i.parenttype = 'Sales Invoice'
+					AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
+				WHERE si2.docstatus = 1
+				  AND NOT EXISTS (
+					SELECT 1 FROM `tabSales Team` st_c2
+					WHERE st_c2.parent = si2.customer
+					  AND st_c2.parenttype = 'Customer'
+					  AND st_c2.sales_person IS NOT NULL AND st_c2.sales_person != ''
+				  )
+			) sp_source ON sp_source.customer = si.customer
 			WHERE si.docstatus = 1
 			  AND si.outstanding_amount > 0
-			  AND st.sales_person IN ({ph})
+			  AND sp_source.sales_person IN ({ph})
 			  {ageing_condition}
-			GROUP BY st.sales_person, si.customer
-			ORDER BY st.sales_person, SUM(si.outstanding_amount) DESC
+			GROUP BY sp_source.sales_person, si.customer
+			ORDER BY sp_source.sales_person, SUM(si.outstanding_amount) DESC
 		""", sp_names + ageing_params, as_dict=True)
-
 		for cr in cust_rows:
 			sp = cr.sales_person
 			if sp not in top_customers_map:
