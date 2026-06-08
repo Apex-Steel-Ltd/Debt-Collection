@@ -74,7 +74,7 @@ class DebtCollectionDashboard {
 			</div>
 			<div class="dc-stat-card warning">
 				<div class="dc-stat-icon">📋</div>
-				<div class="dc-stat-label">Total PDC</div>
+				<div class="dc-stat-label">Total PDC (Cheques Incoming)</div>
 				<div class="dc-stat-value">${fmt(summary.total_pdc)}</div>
 			</div>
 			<div class="dc-stat-card success">

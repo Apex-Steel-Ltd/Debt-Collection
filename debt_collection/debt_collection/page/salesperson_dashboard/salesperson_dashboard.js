@@ -134,12 +134,12 @@ class SalespersonDashboard {
 	_render_grand(g) {
 		const fmt = (v) => format_currency(v, "KES");
 		const stats = [
-			{ label: "Total Outstanding",  value: fmt(g.outstanding_amount), color: "#e53e3e" },
-			{ label: "PDC",                value: fmt(g.pdc_amount),         color: "#d69e2e" },
-			{ label: "Net Outstanding",    value: fmt(g.net_outstanding),    color: "#2b6cb0" },
-			{ label: "14% Interest Loss",  value: fmt(g.interest_loss),      color: "#9b2c2c" },
-			{ label: "Customers",          value: g.customer_count,          color: "#2d3748" },
-			{ label: "Invoices",           value: g.invoice_count,           color: "#2d3748" },
+			{ label: "Total Outstanding",        value: fmt(g.outstanding_amount), color: "#e53e3e" },
+			{ label: "PDC (Allocated to Inv.)",  value: fmt(g.pdc_amount),         color: "#d69e2e" },
+			{ label: "Net Outstanding",          value: fmt(g.net_outstanding),    color: "#2b6cb0" },
+			{ label: "14% Interest Loss",        value: fmt(g.interest_loss),      color: "#9b2c2c" },
+			{ label: "Customers",                value: g.customer_count,          color: "#2d3748" },
+			{ label: "Invoices",                 value: g.invoice_count,           color: "#2d3748" },
 		];
 
 		const cards = stats.map((s, i) => `
@@ -242,10 +242,10 @@ class SalespersonDashboard {
 						<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;">
 							<div style="display:flex;gap:24px;align-items:flex-end;">
 								${[
-									{ label: "Outstanding",    val: r.outstanding_amount, color: "#e53e3e" },
-									{ label: "PDC",            val: r.pdc_amount,         color: "#d69e2e" },
-									{ label: "Net Outstanding",val: r.net_outstanding,    color: "#2b6cb0", big: true },
-									{ label: "Interest Loss",  val: r.interest_loss,      color: "#9b2c2c" },
+									{ label: "Outstanding",         val: r.outstanding_amount, color: "#e53e3e" },
+									{ label: "PDC (Allocated)",      val: r.pdc_amount,         color: "#d69e2e" },
+									{ label: "Net Outstanding",      val: r.net_outstanding,    color: "#2b6cb0", big: true },
+									{ label: "Interest Loss",        val: r.interest_loss,      color: "#9b2c2c" },
 								].map(a => `
 									<div style="text-align:right;">
 										<div style="font-size:10px;color:#a0aec0;text-transform:uppercase;
