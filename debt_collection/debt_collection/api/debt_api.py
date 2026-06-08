@@ -282,7 +282,6 @@ def get_dashboard_summary(collector=None):
 		  AND pe.posting_date > %s
 		  {pdc_collector_cond}
 	""", [today] + pdc_collector_params, as_dict=True)
-
 	# ── Top 10 customers ───────────────────────────────────────────────────────
 	# collector_params is [] or [collector] — no stray 'today' in this query
 	top_customers = frappe.db.sql(f"""
