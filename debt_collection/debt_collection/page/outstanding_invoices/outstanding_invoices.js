@@ -22,57 +22,117 @@ class OutstandingInvoicesPage {
 	setup_toolbar() {
 		this.page.set_secondary_action("Add to Planner", () => this.show_planner_dialog(), "add");
 		this.page.set_primary_action("Refresh", () => this.load(), "refresh");
-		this.$search = this.page.add_field({
-			fieldtype: "Data",
-			fieldname: "search",
-			label: "Search Customers",
-			placeholder: "Search customers...",
-			change: () => { this.current_page = 1; this.load(); },
-		});
-		this.$collector = this.page.add_field({
-			fieldtype: "Link",
-			fieldname: "collector",
-			label: "Collector",
-			options: "User",
-			change: () => { this.current_page = 1; this.load(); },
-		});
-		this.$sales_person = this.page.add_field({
-			fieldtype: "Select",
-			fieldname: "sales_person",
-			label: "Sales Person",
-			options: "",
-			change: () => { this.current_page = 1; this.load(); },
-		});
-
-		// Populate sales person dropdown
-		frappe.call({
-			method: "debt_collection.debt_collection.api.debt_api.get_sales_persons",
-			callback: (r) => {
-				if (!r.message) return;
-				this.$sales_person.df.options = ["", ...r.message].join("\n");
-				this.$sales_person.refresh();
-			},
-		});
+		// Filter values read from body inputs — no page.add_field needed
 	}
 
 	render_layout() {
+		const inp = `style="height:28px;border:1px solid #cbd5e0;border-radius:4px;padding:0 8px;
+		                    font-size:12px;color:#2d3748;background:#fff;outline:none;"`;
+		const lbl = `style="font-size:11px;color:#718096;margin-bottom:3px;display:block;
+		                    text-transform:uppercase;letter-spacing:.4px;"`;
+
 		$(this.page.body).html(`
-			<div class="dc-page">
-				<div class="dc-tab-bar" id="oi-tabs">
+			<div style="padding:20px;">
+
+				<!-- Filter bar -->
+				<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+				            background:#fff;border:1px solid #e2e8f0;border-radius:8px;
+				            padding:12px 16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+					<div>
+						<label ${lbl}>Search</label>
+						<input id="oi-search" type="text" placeholder="Customer name..."
+						       ${inp} style="width:180px;height:28px;border:1px solid #cbd5e0;
+						                    border-radius:4px;padding:0 8px;font-size:12px;">
+					</div>
+					<div>
+						<label ${lbl}>Sales Person</label>
+						<select id="oi-sales-person"
+						        style="height:28px;border:1px solid #cbd5e0;border-radius:4px;
+						               padding:0 8px;font-size:12px;color:#2d3748;
+						               background:#fff;min-width:150px;">
+							<option value="">All</option>
+						</select>
+					</div>
+					<div>
+						<label ${lbl}>Collector</label>
+						<select id="oi-collector"
+						        style="height:28px;border:1px solid #cbd5e0;border-radius:4px;
+						               padding:0 8px;font-size:12px;color:#2d3748;
+						               background:#fff;min-width:150px;">
+							<option value="">All</option>
+						</select>
+					</div>
+					<button id="oi-clear-filters"
+					        style="height:28px;padding:0 12px;border:1px solid #cbd5e0;
+					               border-radius:4px;background:#fff;color:#718096;
+					               font-size:12px;cursor:pointer;">
+						Clear
+					</button>
+				</div>
+
+				<!-- Ageing filter tabs -->
+				<div id="oi-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
 					${["all","over_120","over_90","over_60","over_30","current"].map(f => `
-						<button class="dc-tab ${f === "all" ? "active" : ""}" data-filter="${f}">
+						<button class="oi-tab" data-filter="${f}"
+							style="padding:6px 14px;border:1px solid ${f==="all"?"#2b6cb0":"#cbd5e0"};
+							       border-radius:20px;background:${f==="all"?"#2b6cb0":"#fff"};
+							       color:${f==="all"?"#fff":"#4a5568"};font-size:13px;cursor:pointer;
+							       font-weight:${f==="all"?600:400};">
 							${this.filter_label(f)}
 						</button>
 					`).join("")}
 				</div>
-				<div id="oi-table-wrap" style="margin-top:16px;"></div>
-				<div id="oi-pagination" style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;"></div>
+
+				<div id="oi-table-wrap"></div>
+				<div id="oi-pagination" style="margin-top:12px;display:flex;justify-content:flex-end;
+				                               align-items:center;gap:8px;"></div>
 			</div>
 		`);
 
-		$(this.page.body).on("click", ".dc-tab", (e) => {
-			$(".dc-tab").removeClass("active");
-			$(e.currentTarget).addClass("active");
+		// Populate Sales Person dropdown
+		frappe.call({
+			method: "debt_collection.debt_collection.api.debt_api.get_sales_persons",
+			callback: (r) => {
+				if (!r.message) return;
+				r.message.forEach(sp => {
+					$("#oi-sales-person").append(`<option value="${sp}">${sp}</option>`);
+				});
+			},
+		});
+
+		// Populate Collector dropdown
+		frappe.call({
+			method: "debt_collection.debt_collection.api.debt_api.get_collectors",
+			callback: (r) => {
+				if (!r.message) return;
+				r.message.forEach(c => {
+					$("#oi-collector").append(`<option value="${c.name}">${c.full_name}</option>`);
+				});
+			},
+		});
+
+		// Wire up filter events — debounce search
+		let search_timer;
+		$(this.page.body).on("input", "#oi-search", () => {
+			clearTimeout(search_timer);
+			search_timer = setTimeout(() => { this.current_page = 1; this.load(); }, 400);
+		});
+		$(this.page.body).on("change", "#oi-sales-person, #oi-collector", () => {
+			this.current_page = 1; this.load();
+		});
+		$(this.page.body).on("click", "#oi-clear-filters", () => {
+			$("#oi-search").val("");
+			$("#oi-sales-person").val("");
+			$("#oi-collector").val("");
+			this.current_page = 1;
+			this.load();
+		});
+
+		$(this.page.body).on("click", ".oi-tab", (e) => {
+			$(this.page.body).find(".oi-tab").each((_, el) => {
+				$(el).css({ background: "#fff", color: "#4a5568", borderColor: "#cbd5e0", fontWeight: 400 });
+			});
+			$(e.currentTarget).css({ background: "#2b6cb0", color: "#fff", borderColor: "#2b6cb0", fontWeight: 600 });
 			this.current_filter = $(e.currentTarget).data("filter");
 			this.current_page = 1;
 			this.selected_customers.clear();
@@ -86,12 +146,10 @@ class OutstandingInvoicesPage {
 				? this._visible_customers().forEach(c => this.selected_customers.add(c))
 				: this.selected_customers.clear();
 		});
-
 		$(this.page.body).on("change", ".oi-row-check", (e) => {
 			const customer = $(e.target).data("customer");
 			e.target.checked ? this.selected_customers.add(customer) : this.selected_customers.delete(customer);
 		});
-
 		$(this.page.body).on("click", ".oi-view-btn", (e) => {
 			const customer = $(e.currentTarget).data("customer");
 			this.show_customer_drawer(customer);
@@ -99,7 +157,14 @@ class OutstandingInvoicesPage {
 	}
 
 	filter_label(f) {
-		return { all: "All", over_120: "Over 120 Days", over_90: "Over 90 Days", over_60: "Over 60 Days", over_30: "Over 30 Days", current: "Current" }[f];
+		return {
+			all: "All",
+			over_120: "Over 120 Days",
+			over_90: "Over 90 Days",
+			over_60: "Over 60 Days",
+			over_30: "Over 30 Days",
+			current: "Current (Not yet due)",
+		}[f];
 	}
 
 	_visible_customers() {
@@ -107,9 +172,9 @@ class OutstandingInvoicesPage {
 	}
 
 	load() {
-		const search = this.$search ? this.$search.get_value() : "";
-		const collector = this.$collector ? this.$collector.get_value() : "";
-		const sales_person = this.$sales_person ? this.$sales_person.get_value() : "";
+		const search      = $("#oi-search").val() || null;
+		const collector   = $("#oi-collector").val() || null;
+		const sales_person = $("#oi-sales-person").val() || null;
 		frappe.call({
 			method: "debt_collection.debt_collection.api.debt_api.get_outstanding_customers",
 			args: {
@@ -130,48 +195,78 @@ class OutstandingInvoicesPage {
 
 	render_table(rows) {
 		const fmt = (v) => format_currency(v, "KES");
+		const th = `style="padding:10px 12px;text-align:left;font-weight:600;color:#4a5568;
+		                    border-bottom:2px solid #e2e8f0;white-space:nowrap;font-size:13px;"`;
+		const td_base = `style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;color:#2d3748;"`;
+
 		const row_html = rows.map(r => `
-			<tr>
-				<td><input type="checkbox" class="oi-row-check" data-customer="${r.customer}"></td>
-				<td>
-					<button class="dc-link-btn oi-view-btn" data-customer="${r.customer}">${r.customer_name || r.customer}</button>
-					${r.debt_collector ? `<span class="dc-badge-blue" style="margin-left:6px;">Planned</span>` : ""}
+			<tr style="transition:background .1s;" onmouseover="this.style.background='#f7fafc'"
+			    onmouseout="this.style.background=''">
+				<td ${td_base}><input type="checkbox" class="oi-row-check" data-customer="${r.customer}"></td>
+				<td ${td_base}>
+					<button class="oi-view-btn" data-customer="${r.customer}"
+					        style="background:none;border:none;color:#2b6cb0;cursor:pointer;
+					               font-size:13px;padding:0;text-align:left;">
+						${r.customer_name || r.customer}
+					</button>
+					${r.debt_collector ? `<span style="margin-left:6px;padding:2px 8px;background:#bee3f8;
+					                             color:#2b6cb0;border-radius:10px;font-size:11px;
+					                             font-weight:600;">Planned</span>` : ""}
 				</td>
-				<td style="color:#553c9a;font-size:12px;">${r.sales_person || "—"}</td>
-				<td>${fmt(r.total_inv_amount)}</td>
-				<td style="font-weight:600;">${fmt(r.outstanding_amount)}</td>
-				<td>${fmt(r.pdc_amount)}</td>
-				<td style="font-weight:700;color:#2b6cb0;">${fmt(r.net_outstanding)}</td>
-				<td style="color:${r.avg_overdue_days > 90 ? "#e53e3e" : r.avg_overdue_days > 30 ? "#dd6b20" : "#38a169"};font-weight:700;">${Math.round(r.avg_overdue_days || 0)}</td>
-				<td style="color:#e53e3e;">${fmt(r.interest_loss)}</td>
+				<td style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:12px;
+				           color:#553c9a;">${r.sales_person || "—"}</td>
+				<td ${td_base}>${fmt(r.total_inv_amount)}</td>
+				<td style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
+				           font-weight:600;color:#2d3748;">${fmt(r.outstanding_amount)}</td>
+				<td ${td_base}>${fmt(r.pdc_amount)}</td>
+				<td style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
+				           font-weight:700;color:#2b6cb0;">${fmt(r.net_outstanding)}</td>
+				<td style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;font-weight:700;
+				           color:${r.avg_overdue_days > 90 ? "#e53e3e" : r.avg_overdue_days > 30 ? "#dd6b20" : "#38a169"};">
+					${Math.round(r.avg_overdue_days || 0)}
+				</td>
+				<td style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
+				           color:#e53e3e;">${fmt(r.interest_loss)}</td>
 			</tr>
 		`).join("");
 
+		const table_style = `style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;
+		                            border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);"`;
+		const thead_style = `style="background:#f7fafc;"`;
+
 		$("#oi-table-wrap").html(`
-			<table class="dc-table">
-				<thead>
-					<tr>
-						<th><input type="checkbox" id="oi-select-all"></th>
-						<th>Name</th>
-						<th>Sales Person</th>
-						<th>Total Inv Amount</th>
-						<th>Outstanding Amount ↓</th>
-						<th>PDC Amount</th>
-						<th>Net Outstanding</th>
-						<th>Avg Overdue Days</th>
-						<th>14% Interest Loss</th>
-					</tr>
-				</thead>
-				<tbody>${row_html || '<tr><td colspan="9" style="text-align:center;color:#a0aec0;padding:32px;">No outstanding invoices found.</td></tr>'}</tbody>
-			</table>
+			<div style="overflow-x:auto;">
+				<table ${table_style}>
+					<thead ${thead_style}>
+						<tr>
+							<th ${th}><input type="checkbox" id="oi-select-all"></th>
+							<th ${th}>Name</th>
+							<th ${th}>Sales Person</th>
+							<th ${th}>Total Inv Amount</th>
+							<th ${th}>Outstanding Amount ↓</th>
+							<th ${th}>PDC Amount</th>
+							<th ${th}>Net Outstanding</th>
+							<th ${th}>Avg Overdue Days</th>
+							<th ${th}>14% Interest Loss</th>
+						</tr>
+					</thead>
+					<tbody>${row_html || `<tr><td colspan="9" style="text-align:center;color:#a0aec0;
+					                         padding:32px;font-size:14px;">
+					                         No outstanding invoices found.</td></tr>`}</tbody>
+				</table>
+			</div>
 		`);
 	}
 
 	render_pagination(total) {
 		const pages = Math.ceil(total / this.page_size);
-		let html = `<span style="color:#718096;font-size:13px;">Showing ${Math.min((this.current_page - 1) * this.page_size + 1, total)} - ${Math.min(this.current_page * this.page_size, total)} of ${total}</span>`;
-		if (this.current_page > 1) html += `<button class="dc-btn-sm" id="oi-prev">‹ Prev</button>`;
-		if (this.current_page < pages) html += `<button class="dc-btn-sm" id="oi-next">Next ›</button>`;
+		const start = Math.min((this.current_page - 1) * this.page_size + 1, total);
+		const end   = Math.min(this.current_page * this.page_size, total);
+		const btn   = `style="padding:4px 12px;border:1px solid #cbd5e0;border-radius:4px;
+		                      background:#fff;color:#2b6cb0;font-size:12px;cursor:pointer;"`;
+		let html = `<span style="color:#718096;font-size:13px;">Showing ${start}–${end} of ${total}</span>`;
+		if (this.current_page > 1) html += `<button ${btn} id="oi-prev">‹ Prev</button>`;
+		if (this.current_page < pages) html += `<button ${btn} id="oi-next">Next ›</button>`;
 		$("#oi-pagination").html(html);
 		$("#oi-prev").on("click", () => { this.current_page--; this.load(); });
 		$("#oi-next").on("click", () => { this.current_page++; this.load(); });
