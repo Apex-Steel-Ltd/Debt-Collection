@@ -107,7 +107,8 @@ class SalespersonDashboard {
 		$(this.page.body).on("click", ".sp-view-all", (e) => {
 			e.stopPropagation();
 			const sp = $(e.currentTarget).data("sp");
-			frappe.set_route("outstanding-invoices", { sales_person: sp });
+			// Encode as URL param so outstanding-invoices page picks it up on load
+			window.location.href = `/app/outstanding-invoices?sales_person=${encodeURIComponent(sp)}`;
 		});
 	}
 

@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"0L6riBumCR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"ByoUktwgr1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"KD3h97F3HE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"Ho7-aZmstV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Dashboard\",\"col\":3}},{\"id\":\"6RIyitWkIc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person Dashboard\",\"col\":3}},{\"id\":\"Y3-Cx30cKF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}}]",
+ "content": "[{\"id\":\"0L6riBumCR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"ByoUktwgr1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"KD3h97F3HE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"Ho7-aZmstV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Dashboard\",\"col\":3}},{\"id\":\"6RIyitWkIc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person Dashboard\",\"col\":3}},{\"id\":\"6UthxneJtC\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Plans\",\"col\":3}},{\"id\":\"dRkz9XzZef\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Unreconciled Entries\",\"col\":3}},{\"id\":\"Y3-Cx30cKF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}}]",
  "creation": "2026-06-05 10:24:24.387679",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "is_hidden": 0,
  "label": "Debt Collection",
  "links": [],
- "modified": "2026-06-05 11:22:42.126057",
+ "modified": "2026-06-12 12:06:04.193191",
  "modified_by": "Administrator",
  "module": "Debt Collection",
  "name": "Debt Collection",
@@ -42,8 +42,22 @@
   {
    "color": "Grey",
    "doc_view": "List",
+   "label": "Active Plans",
+   "link_to": "active-plans",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
    "label": "Outstanding Invoices",
    "link_to": "outstanding-invoices",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Unreconciled Entries",
+   "link_to": "je-unreconciled",
    "type": "Page"
   },
   {
