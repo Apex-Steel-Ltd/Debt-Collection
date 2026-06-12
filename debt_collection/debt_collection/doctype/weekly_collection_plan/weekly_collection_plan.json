@@ -1,8 +1,7 @@
 {
  "actions": [],
  "autoname": "format:WCP-{YYYY}-W{##}",
- "creation": "2026-06-03 00:00:00.000000",
- "custom": 0,
+ "creation": "2026-06-03 00:00:00",
  "doctype": "DocType",
  "document_type": "Document",
  "engine": "InnoDB",
@@ -11,7 +10,9 @@
   "end_date",
   "status",
   "section_customers",
-  "customers"
+  "customers",
+  "section_break_geyw",
+  "remarks"
  ],
  "fields": [
   {
@@ -47,15 +48,23 @@
    "fieldtype": "Table",
    "label": "Customers",
    "options": "Weekly Collection Plan Customer"
+  },
+  {
+   "fieldname": "section_break_geyw",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
   }
  ],
- "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-06-03 00:00:00.000000",
+ "modified": "2026-06-12 12:03:19.557231",
  "modified_by": "Administrator",
  "module": "Debt Collection",
  "name": "Weekly Collection Plan",
- "naming_rule": "Expression",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -82,7 +91,9 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "start_date",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }

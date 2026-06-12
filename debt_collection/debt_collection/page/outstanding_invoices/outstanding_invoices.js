@@ -2,6 +2,25 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 	frappe.outstanding_invoices = new OutstandingInvoicesPage(wrapper);
 };
 
+frappe.pages["outstanding-invoices"].on_page_show = function (wrapper) {
+	// Read sales_person from URL param and apply filter if present
+	const sp = frappe.utils.get_url_arg("sales_person");
+	if (sp && frappe.outstanding_invoices) {
+		// Wait for dropdowns to be populated then set value
+		const trySet = (attempts) => {
+			const $sel = $("#oi-sales-person");
+			if ($sel.find(`option[value="${sp}"]`).length) {
+				$sel.val(sp);
+				frappe.outstanding_invoices.current_page = 1;
+				frappe.outstanding_invoices.load();
+			} else if (attempts > 0) {
+				setTimeout(() => trySet(attempts - 1), 200);
+			}
+		};
+		trySet(10);
+	}
+};
+
 class OutstandingInvoicesPage {
 	constructor(wrapper) {
 		this.wrapper = wrapper;

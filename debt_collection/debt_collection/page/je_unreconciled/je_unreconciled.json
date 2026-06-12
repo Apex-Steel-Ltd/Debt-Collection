@@ -1,0 +1,17 @@
+{
+ "creation": "2026-06-08 00:00:00.000000",
+ "doctype": "Page",
+ "icon": "warning",
+ "modified": "2026-06-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Debt Collection",
+ "name": "je-unreconciled",
+ "owner": "Administrator",
+ "page_name": "je-unreconciled",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Accounts User"}
+ ],
+ "standard": "Yes",
+ "title": "JE Unreconciled Balances"
+}

@@ -75,7 +75,7 @@ def get_outstanding_customers(ageing_filter=None, collector=None, sales_person=N
 	ageing_filter: 'over_120' | 'over_90' | 'over_60' | 'over_30' | 'current' | None (all)
 	"""
 	today = getdate(nowdate())
-	conditions = ["si.docstatus = 1", "si.outstanding_amount > 0"]
+	conditions = ["si.docstatus = 1", "si.outstanding_amount > 0", "si.is_return = 0"]
 	params = []
 
 	ageing_map = {
@@ -239,17 +239,14 @@ def get_customer_invoices(customer):
 
 @frappe.whitelist()
 def get_dashboard_summary(collector=None):
-	"""Recovery Dashboard summary stats and top customers."""
+	"""Recovery Dashboard summary stats, PDC ageing, JE unreconciled, SP summary."""
 	today = getdate(nowdate())
 
-	# Collector filter — only injected into WHERE when provided
 	collector_cond   = " AND c.custom_debt_collector = %s" if collector else ""
 	collector_params = [collector] if collector else []
+	base_inv_where   = f"si.docstatus = 1 AND si.outstanding_amount > 0 AND si.is_return = 0{collector_cond}"
 
-	base_inv_where = f"si.docstatus = 1 AND si.outstanding_amount > 0{collector_cond}"
-
-	# ── Ageing totals ──────────────────────────────────────────────────────────
-	# 5 × today feeds the 5 DATEDIFF() calls; collector_params feeds the WHERE
+	# ── Invoice ageing totals ──────────────────────────────────────────────────
 	totals = frappe.db.sql(f"""
 		SELECT
 			SUM(si.outstanding_amount) AS total_outstanding,
@@ -268,7 +265,7 @@ def get_dashboard_summary(collector=None):
 		WHERE {base_inv_where}
 	""", [today, today, today, today, today] + collector_params, as_dict=True)
 
-	# ── Total PDC ──────────────────────────────────────────────────────────────
+	# ── Total PDC (full cheque value) ──────────────────────────────────────────
 	pdc_collector_cond   = " AND c.custom_debt_collector = %s" if collector else ""
 	pdc_collector_params = [collector] if collector else []
 
@@ -282,8 +279,86 @@ def get_dashboard_summary(collector=None):
 		  AND pe.posting_date > %s
 		  {pdc_collector_cond}
 	""", [today] + pdc_collector_params, as_dict=True)
+
+	# ── PDC ageing buckets ─────────────────────────────────────────────────────
+	next7  = add_days(today, 7)
+	next14 = add_days(today, 14)
+	next30 = add_days(today, 30)
+	next60 = add_days(today, 60)
+
+	pdc_ageing = frappe.db.sql(f"""
+		SELECT
+			SUM(CASE WHEN pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS within_7,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS day_8_14,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS day_15_30,
+			SUM(CASE WHEN pe.posting_date > %s AND pe.posting_date <= %s THEN pe.paid_amount ELSE 0 END) AS day_31_60,
+			SUM(CASE WHEN pe.posting_date > %s THEN pe.paid_amount ELSE 0 END) AS over_60
+		FROM `tabPayment Entry` pe
+		LEFT JOIN `tabCustomer` c ON c.name = pe.party
+		WHERE pe.payment_type = 'Receive'
+		  AND pe.party_type = 'Customer'
+		  AND pe.docstatus = 1
+		  AND pe.posting_date > %s
+		  {pdc_collector_cond}
+	""", [next7, next7, next14, next14, next30, next30, next60, next60, today] + pdc_collector_params, as_dict=True)
+
+	# ── JE unreconciled ────────────────────────────────────────────────────────
+	je_unreconciled = frappe.db.sql("""
+		SELECT
+			COUNT(DISTINCT gle.party) AS customer_count,
+			ABS(SUM(gle.credit - gle.debit)) AS unreconciled_amount
+		FROM `tabGL Entry` gle
+		WHERE gle.docstatus = 1
+		  AND gle.is_cancelled = 0
+		  AND gle.voucher_type = 'Journal Entry'
+		  AND gle.party_type = 'Customer'
+		  AND gle.party IS NOT NULL
+		  AND gle.credit > gle.debit
+		  AND gle.account IN (
+			SELECT acc.name FROM `tabAccount` acc
+			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM `tabPayment Ledger Entry` ple
+			WHERE ple.voucher_no = gle.voucher_no
+			  AND ple.against_voucher_type = 'Sales Invoice'
+			  AND ple.docstatus = 1
+		  )
+	""", as_dict=True)
+
+	# ── Salesperson summary (top 10) ───────────────────────────────────────────
+	sp_summary = frappe.db.sql(f"""
+		SELECT
+			resolved_sp.sales_person,
+			COUNT(DISTINCT si.customer) AS customer_count,
+			SUM(si.outstanding_amount)  AS outstanding_amount
+		FROM `tabSales Invoice` si
+		INNER JOIN (
+			SELECT c.name AS customer,
+				COALESCE(
+					(SELECT st_c.sales_person FROM `tabSales Team` st_c
+					 WHERE st_c.parent = c.name AND st_c.parenttype = 'Customer'
+					   AND st_c.sales_person IS NOT NULL AND st_c.sales_person != ''
+					 LIMIT 1),
+					(SELECT st_i.sales_person FROM `tabSales Team` st_i
+					 INNER JOIN `tabSales Invoice` si_fb ON si_fb.name = st_i.parent
+					 WHERE si_fb.customer = c.name AND st_i.parenttype = 'Sales Invoice'
+					   AND st_i.sales_person IS NOT NULL AND st_i.sales_person != ''
+					   AND si_fb.docstatus = 1
+					 LIMIT 1)
+				) AS sales_person
+			FROM `tabCustomer` c
+		) resolved_sp ON resolved_sp.customer = si.customer
+			AND resolved_sp.sales_person IS NOT NULL
+		LEFT JOIN `tabCustomer` c ON c.name = si.customer
+		WHERE si.docstatus = 1 AND si.outstanding_amount > 0 AND si.is_return = 0
+		  {collector_cond}
+		GROUP BY resolved_sp.sales_person
+		ORDER BY SUM(si.outstanding_amount) DESC
+		LIMIT 10
+	""", collector_params, as_dict=True)
+
 	# ── Top 10 customers ───────────────────────────────────────────────────────
-	# collector_params is [] or [collector] — no stray 'today' in this query
 	top_customers = frappe.db.sql(f"""
 		SELECT
 			si.customer,
@@ -304,12 +379,8 @@ def get_dashboard_summary(collector=None):
 
 	recent_activity = frappe.db.sql(f"""
 		SELECT
-			cfu.name,
-			cfu.customer,
-			cfu.customer_name,
-			cfu.contact_method,
-			cfu.remarks,
-			cfu.collector,
+			cfu.name, cfu.customer, cfu.customer_name,
+			cfu.contact_method, cfu.remarks, cfu.collector,
 			DATE(cfu.creation) AS created_date
 		FROM `tabCollection Follow Up` cfu
 		WHERE {recent_cond}
@@ -320,13 +391,18 @@ def get_dashboard_summary(collector=None):
 	summary           = totals[0] if totals else {}
 	total_pdc         = flt(pdc_total[0].total_pdc) if pdc_total else 0
 	total_outstanding = flt(summary.get("total_outstanding", 0))
-	summary["total_pdc"]       = total_pdc
-	summary["net_outstanding"] = total_outstanding - total_pdc
+	summary["total_pdc"]         = total_pdc
+	summary["net_outstanding"]   = total_outstanding - total_pdc
+	summary["pdc_ageing"]        = pdc_ageing[0] if pdc_ageing else {}
+	je_row = je_unreconciled[0] if je_unreconciled else {}
+	summary["je_unreconciled"]   = flt(je_row.get("unreconciled_amount", 0))
+	summary["je_customer_count"] = je_row.get("customer_count", 0)
 
 	return {
 		"summary":         summary,
 		"top_customers":   top_customers,
 		"recent_activity": recent_activity,
+		"sp_summary":      sp_summary,
 	}
 
 
@@ -431,7 +507,7 @@ def _get_customer_stats(customer):
 			AVG(GREATEST(DATEDIFF(%s, si.due_date), 0)) AS avg_overdue_days,
 			GROUP_CONCAT(si.name) AS invoice_list
 		FROM `tabSales Invoice` si
-		WHERE si.customer = %s AND si.docstatus = 1 AND si.outstanding_amount > 0
+		WHERE si.customer = %s AND si.docstatus = 1 AND si.outstanding_amount > 0 AND si.is_return = 0
 		GROUP BY si.customer
 	""", (today, customer), as_dict=True)
 
@@ -534,7 +610,7 @@ def get_follow_up_dashboard(collector=None, sales_person=None, customer=None, we
 		os_rows = frappe.db.sql(f"""
 			SELECT customer, SUM(outstanding_amount) AS outstanding
 			FROM `tabSales Invoice`
-			WHERE docstatus = 1 AND outstanding_amount > 0 AND customer IN ({ph})
+			WHERE docstatus = 1 AND outstanding_amount > 0 AND is_return = 0 AND customer IN ({ph})
 			GROUP BY customer
 		""", customers, as_dict=True)
 		outstanding_map = {r.customer: flt(r.outstanding) for r in os_rows}
@@ -586,6 +662,75 @@ def update_follow_up(name, contact_method, remarks, next_follow_up_date=None,
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return doc.name
+
+
+@frappe.whitelist()
+def get_je_unreconciled(page=1, page_size=50):
+	"""
+	Returns customers with Journal Entry credits against Receivable accounts
+	that are not linked to any Sales Invoice payment.
+	These represent amounts that reduce the GL receivable balance but are
+	not reflected in Sales Invoice outstanding amounts.
+	"""
+	offset = (int(page) - 1) * int(page_size)
+
+	rows = frappe.db.sql("""
+		SELECT
+			gle.party AS customer,
+			c.customer_name,
+			gle.voucher_no AS journal_entry,
+			gle.posting_date,
+			gle.account,
+			ABS(gle.credit - gle.debit) AS unreconciled_amount,
+			gle.remarks
+		FROM `tabGL Entry` gle
+		LEFT JOIN `tabCustomer` c ON c.name = gle.party
+		WHERE gle.docstatus = 1
+		  AND gle.is_cancelled = 0
+		  AND gle.voucher_type = 'Journal Entry'
+		  AND gle.party_type = 'Customer'
+		  AND gle.party IS NOT NULL
+		  AND gle.credit > gle.debit
+		  AND gle.account IN (
+			SELECT acc.name FROM `tabAccount` acc
+			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM `tabPayment Ledger Entry` ple
+			WHERE ple.voucher_no = gle.voucher_no
+			  AND ple.against_voucher_type = 'Sales Invoice'
+			  AND ple.docstatus = 1
+		  )
+		ORDER BY ABS(gle.credit - gle.debit) DESC
+		LIMIT %s OFFSET %s
+	""", [int(page_size), offset], as_dict=True)
+
+	total_row = frappe.db.sql("""
+		SELECT COUNT(*) AS cnt, ABS(SUM(gle.credit - gle.debit)) AS total_amount
+		FROM `tabGL Entry` gle
+		WHERE gle.docstatus = 1
+		  AND gle.is_cancelled = 0
+		  AND gle.voucher_type = 'Journal Entry'
+		  AND gle.party_type = 'Customer'
+		  AND gle.party IS NOT NULL
+		  AND gle.credit > gle.debit
+		  AND gle.account IN (
+			SELECT acc.name FROM `tabAccount` acc
+			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM `tabPayment Ledger Entry` ple
+			WHERE ple.voucher_no = gle.voucher_no
+			  AND ple.against_voucher_type = 'Sales Invoice'
+			  AND ple.docstatus = 1
+		  )
+	""", as_dict=True)
+
+	return {
+		"data":         rows,
+		"total":        total_row[0].cnt if total_row else 0,
+		"total_amount": flt(total_row[0].total_amount) if total_row else 0,
+	}
 
 
 @frappe.whitelist()
@@ -759,6 +904,7 @@ def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 			AND resolved_sp.sales_person IS NOT NULL
 		WHERE si.docstatus = 1
 		  AND si.outstanding_amount > 0
+		  AND si.is_return = 0
 		  {ageing_condition}
 		  {sp_filter_condition}
 		GROUP BY resolved_sp.sales_person
@@ -836,6 +982,7 @@ def get_salesperson_dashboard(ageing_filter=None, sales_person=None):
 			) resolved_sp ON resolved_sp.customer = si.customer
 			WHERE si.docstatus = 1
 			  AND si.outstanding_amount > 0
+			  AND si.is_return = 0
 			  AND resolved_sp.sales_person IN ({ph})
 			  {ageing_condition}
 			GROUP BY resolved_sp.sales_person, si.customer
