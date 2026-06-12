@@ -12,6 +12,7 @@ class CollectionFollowUpFormPage {
 		});
 		this.customer = frappe.utils.get_url_arg("customer") || "";
 		this.pre_selected_invoices = [];
+		this.pre_weekly_plan = frappe.utils.get_url_arg("weekly_collection_plan") || "";
 		try {
 			const inv_param = frappe.utils.get_url_arg("invoices");
 			if (inv_param) this.pre_selected_invoices = JSON.parse(decodeURIComponent(inv_param));
@@ -81,6 +82,9 @@ class CollectionFollowUpFormPage {
 
 		if (this.customer) {
 			this.form_fields.customer.set_value(this.customer);
+		}
+		if (this.pre_weekly_plan) {
+			this.form_fields.weekly_collection_plan.set_value(this.pre_weekly_plan);
 		}
 	}
 

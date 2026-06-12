@@ -36,11 +36,36 @@ class ActivePlansPage {
 
 		// Expand / collapse customer table inside a plan card
 		$(this.page.body).on("click", ".ap-plan-header", (e) => {
-			if ($(e.target).closest("a,button").length) return;
+			if ($(e.target).closest("a,button,select").length) return;
 			const card = $(e.currentTarget).closest(".ap-plan-card");
 			card.find(".ap-plan-body").slideToggle(180);
 			const ch = card.find(".ap-chevron");
 			ch.text(ch.text() === "▼" ? "▲" : "▼");
+		});
+
+		// Customer dropdown "View Invoices" button
+		$(this.page.body).on("click", ".ap-view-customer-btn", (e) => {
+			e.stopPropagation();
+			const btn = $(e.currentTarget);
+			const card = btn.closest(".ap-plan-card");
+			const select = card.find(".ap-customer-select");
+			const customer = select.val();
+			const plan_name = card.data("plan");
+			if (!customer) {
+				frappe.msgprint("Please select a customer first.", "No Customer");
+				return;
+			}
+			frappe.call({
+				method: "debt_collection.debt_collection.api.debt_api.get_customer_invoices",
+				args: { customer },
+				callback: (r) => {
+					if (!r.message) return;
+					dc_show_customer_invoices(customer, r.message.invoices, r.message.ageing, {
+						show_follow_up: true,
+						plan_name,
+					});
+				},
+			});
 		});
 	}
 
@@ -121,16 +146,19 @@ class ActivePlansPage {
 				? Math.round((p.count_completed / p.customer_count) * 100)
 				: 0;
 
-			// Progress bar colour
 			const prog_color = pct_done === 100 ? "#38a169" : pct_done > 50 ? "#d69e2e" : "#2b6cb0";
 
-			// Status pill colours
 			const pill = (label, count, bg, fg) => count > 0 ? `
 				<span style="background:${bg};color:${fg};padding:2px 10px;border-radius:10px;
 				             font-size:11px;font-weight:600;">${label}: ${count}</span>
 			` : "";
 
-			// Customer rows
+			// Customer select dropdown options
+			const cust_options = (p.customers || []).map(c =>
+				`<option value="${c.customer}">${c.customer_name || c.customer}</option>`
+			).join("");
+
+			// Customer rows in the expanded body
 			const cust_rows = (p.customers || []).map(c => {
 				const status_colors = {
 					"Planned":   { bg: "#ebf8ff", fg: "#2b6cb0" },
@@ -166,7 +194,7 @@ class ActivePlansPage {
 			}).join("");
 
 			return `
-				<div class="ap-plan-card"
+				<div class="ap-plan-card" data-plan="${p.name}"
 				     style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
 				            margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
 
@@ -176,17 +204,14 @@ class ActivePlansPage {
 					            padding:16px 20px;cursor:pointer;gap:16px;">
 
 						<div style="flex:1;min-width:0;">
-							<!-- Plan name link -->
 							<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
 								<a href="/app/weekly-collection-plan/${p.name}" target="_blank"
-								   style="font-size:16px;font-weight:700;color:#2b6cb0;
-								          text-decoration:none;"
+								   style="font-size:16px;font-weight:700;color:#2b6cb0;text-decoration:none;"
 								   onclick="event.stopPropagation();">
 									${p.name}
 								</a>
 								<span style="font-size:12px;color:#718096;">${week_label}</span>
 							</div>
-							<!-- Pills -->
 							<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
 								${pill("Planned",   p.count_planned,   "#ebf8ff", "#2b6cb0")}
 								${pill("Completed", p.count_completed, "#c6f6d5", "#276749")}
@@ -198,7 +223,6 @@ class ActivePlansPage {
 						</div>
 
 						<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;">
-							<!-- Amount blocks -->
 							<div style="display:flex;gap:20px;align-items:flex-end;">
 								${[
 									{ label: "Outstanding",    val: p.total_outstanding,     color: "#e53e3e" },
@@ -213,7 +237,6 @@ class ActivePlansPage {
 									</div>
 								`).join("")}
 							</div>
-							<!-- Progress bar -->
 							<div style="width:180px;">
 								<div style="display:flex;justify-content:space-between;
 								            font-size:11px;color:#718096;margin-bottom:3px;">
@@ -228,9 +251,31 @@ class ActivePlansPage {
 						</div>
 					</div>
 
-					<!-- Body: customer table -->
+					<!-- Body: customer table + follow-up dropdown -->
 					<div class="ap-plan-body"
 					     style="display:none;border-top:1px solid #edf2f7;padding:0;background:#fafafa;">
+
+						<!-- Customer selector for follow-up -->
+						<div style="padding:12px 20px;border-bottom:1px solid #edf2f7;
+						            display:flex;gap:10px;align-items:center;background:#fff;">
+							<label style="font-size:12px;font-weight:600;color:#4a5568;white-space:nowrap;">
+								Start Follow Up:
+							</label>
+							<select class="ap-customer-select"
+							        style="height:30px;border:1px solid #cbd5e0;border-radius:4px;
+							               padding:0 8px;font-size:12px;color:#2d3748;
+							               background:#fff;flex:1;max-width:340px;">
+								<option value="">— Select Customer —</option>
+								${cust_options}
+							</select>
+							<button class="ap-view-customer-btn"
+							        style="height:30px;padding:0 14px;border:none;border-radius:4px;
+							               background:#2b6cb0;color:#fff;font-size:12px;
+							               font-weight:600;cursor:pointer;">
+								View Invoices →
+							</button>
+						</div>
+
 						<div style="overflow-x:auto;">
 							<table style="width:100%;border-collapse:collapse;font-size:13px;">
 								<thead>
