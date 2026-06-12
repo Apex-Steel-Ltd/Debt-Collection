@@ -77,7 +77,7 @@ class DebtCollectionDashboard {
 			{ icon: "💰", label: "Total Outstanding Balance", value: fmt(summary.total_outstanding), border: "#2b6cb0" },
 			{ icon: "📋", label: "Total PDC (Cheques Incoming)", value: fmt(summary.total_pdc), border: "#d69e2e" },
 			{ icon: "✅", label: "Total Net Outstanding", value: fmt(summary.net_outstanding), border: "#38a169" },
-			{ icon: "⚠️", label: "JE Unreconciled", value: fmt(summary.je_unreconciled),
+			{ icon: "⚠️", label: "Unreconciled (JE + PE)", value: fmt(summary.je_unreconciled),
 			  sub: `${summary.je_customer_count} customer(s) — <a href="/app/je-unreconciled" style="color:#c53030;font-size:11px;">View →</a>`,
 			  border: "#e53e3e" },
 		];

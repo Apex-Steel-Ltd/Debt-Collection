@@ -199,6 +199,7 @@ def get_outstanding_customers(ageing_filter=None, collector=None, sales_person=N
 def get_customer_invoices(customer):
 	"""
 	Returns all outstanding invoices for a customer with PDC details and ageing buckets.
+	Ageing: last 6 months by name (e.g. 'Mar 2025'), older ones grouped as 'Before {6th month}'.
 	"""
 	today = getdate(nowdate())
 
@@ -216,13 +217,37 @@ def get_customer_invoices(customer):
 		WHERE si.customer = %s
 		  AND si.docstatus = 1
 		  AND si.outstanding_amount > 0
+		  AND si.is_return = 0
 		ORDER BY si.due_date ASC
 	""", (today, customer), as_dict=True)
 
 	invoice_names = [i.name for i in invoices]
 	pdc_map = _get_pdc_for_invoices(invoice_names)
 
-	ageing = {}
+	# Build the 6-month window: current month and 5 prior months
+	import calendar
+	month_names = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
+	               7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+
+	def month_label(year, month):
+		return f"{month_names[month]} {year}"
+
+	# Generate last 6 months as (year, month) tuples, most-recent first
+	recent_months = []
+	y, m = today.year, today.month
+	for _ in range(6):
+		recent_months.append((y, m))
+		m -= 1
+		if m == 0:
+			m = 12
+			y -= 1
+	recent_months_set = {(y2, m2) for y2, m2 in recent_months}
+
+	# The oldest of the 6 months is the cutoff
+	oldest_y, oldest_m = recent_months[-1]
+	oldest_label = month_label(oldest_y, oldest_m)
+
+	ageing = {}  # {display_label: amount}
 	for inv in invoices:
 		pdc = pdc_map.get(inv.name, {})
 		inv.pdc_amount = flt(pdc.get("pdc_amount", 0))
@@ -230,11 +255,31 @@ def get_customer_invoices(customer):
 		inv.net_outstanding = flt(inv.outstanding_amount) - inv.pdc_amount
 		inv.sales_person = _get_sales_person_for_invoice(inv.name, customer)
 
-		# Bucket by invoice month
-		month_key = str(inv.invoice_date)[:7] if inv.invoice_date else "Unknown"
-		ageing[month_key] = flt(ageing.get(month_key, 0)) + flt(inv.outstanding_amount)
+		# Bucket by invoice posting month
+		if inv.invoice_date:
+			inv_date = getdate(str(inv.invoice_date))
+			iy, im = inv_date.year, inv_date.month
+			if (iy, im) in recent_months_set:
+				label = month_label(iy, im)
+			else:
+				label = f"Before {oldest_label}"
+		else:
+			label = "Unknown"
+		ageing[label] = flt(ageing.get(label, 0)) + flt(inv.outstanding_amount)
 
-	return {"invoices": invoices, "ageing": ageing}
+	# Build ordered ageing: recent 6 months (most recent first), then "Before..."
+	ordered_ageing = []
+	for (y2, m2) in recent_months:
+		lbl = month_label(y2, m2)
+		if lbl in ageing:
+			ordered_ageing.append({"label": lbl, "amount": ageing[lbl]})
+	before_lbl = f"Before {oldest_label}"
+	if before_lbl in ageing:
+		ordered_ageing.append({"label": before_lbl, "amount": ageing[before_lbl]})
+	if "Unknown" in ageing:
+		ordered_ageing.append({"label": "Unknown", "amount": ageing["Unknown"]})
+
+	return {"invoices": invoices, "ageing": ordered_ageing}
 
 
 @frappe.whitelist()
@@ -302,7 +347,7 @@ def get_dashboard_summary(collector=None):
 		  {pdc_collector_cond}
 	""", [next7, next7, next14, next14, next30, next30, next60, next60, today] + pdc_collector_params, as_dict=True)
 
-	# ── JE unreconciled ────────────────────────────────────────────────────────
+	# ── Unreconciled entries (JE + PE unallocated) ────────────────────────────
 	je_unreconciled = frappe.db.sql("""
 		SELECT
 			COUNT(DISTINCT gle.party) AS customer_count,
@@ -325,6 +370,22 @@ def get_dashboard_summary(collector=None):
 			  AND ple.docstatus = 1
 		  )
 	""", as_dict=True)
+
+	pe_unallocated = frappe.db.sql("""
+		SELECT
+			COUNT(DISTINCT party) AS customer_count,
+			SUM(unallocated_amount) AS unreconciled_amount
+		FROM `tabPayment Entry`
+		WHERE docstatus = 1
+		  AND party_type = 'Customer'
+		  AND payment_type = 'Receive'
+		  AND unallocated_amount > 0
+	""", as_dict=True)
+
+	je_row = je_unreconciled[0] if je_unreconciled else {}
+	pe_row = pe_unallocated[0] if pe_unallocated else {}
+	total_unreconciled   = flt(je_row.get("unreconciled_amount", 0)) + flt(pe_row.get("unreconciled_amount", 0))
+	total_unreconciled_c = (je_row.get("customer_count") or 0) + (pe_row.get("customer_count") or 0)
 
 	# ── Salesperson summary (top 10) ───────────────────────────────────────────
 	sp_summary = frappe.db.sql(f"""
@@ -394,9 +455,8 @@ def get_dashboard_summary(collector=None):
 	summary["total_pdc"]         = total_pdc
 	summary["net_outstanding"]   = total_outstanding - total_pdc
 	summary["pdc_ageing"]        = pdc_ageing[0] if pdc_ageing else {}
-	je_row = je_unreconciled[0] if je_unreconciled else {}
-	summary["je_unreconciled"]   = flt(je_row.get("unreconciled_amount", 0))
-	summary["je_customer_count"] = je_row.get("customer_count", 0)
+	summary["je_unreconciled"]   = total_unreconciled
+	summary["je_customer_count"] = total_unreconciled_c
 
 	return {
 		"summary":         summary,
@@ -667,22 +727,23 @@ def update_follow_up(name, contact_method, remarks, next_follow_up_date=None,
 @frappe.whitelist()
 def get_je_unreconciled(page=1, page_size=50):
 	"""
-	Returns customers with Journal Entry credits against Receivable accounts
-	that are not linked to any Sales Invoice payment.
-	These represent amounts that reduce the GL receivable balance but are
-	not reflected in Sales Invoice outstanding amounts.
+	Returns unreconciled entries against Receivable accounts:
+	  1. Journal Entry credits not linked to any Sales Invoice
+	  2. Payment Entries with unallocated_amount > 0
 	"""
 	offset = (int(page) - 1) * int(page_size)
 
-	rows = frappe.db.sql("""
+	# ── Journal Entries ────────────────────────────────────────────────────────
+	je_rows = frappe.db.sql("""
 		SELECT
-			gle.party AS customer,
-			c.customer_name,
-			gle.voucher_no AS journal_entry,
+			'Journal Entry'            AS entry_type,
+			gle.voucher_no             AS entry_name,
 			gle.posting_date,
+			gle.party                  AS customer,
+			c.customer_name,
 			gle.account,
 			ABS(gle.credit - gle.debit) AS unreconciled_amount,
-			gle.remarks
+			gle.remarks                AS remarks
 		FROM `tabGL Entry` gle
 		LEFT JOIN `tabCustomer` c ON c.name = gle.party
 		WHERE gle.docstatus = 1
@@ -702,34 +763,51 @@ def get_je_unreconciled(page=1, page_size=50):
 			  AND ple.docstatus = 1
 		  )
 		ORDER BY ABS(gle.credit - gle.debit) DESC
-		LIMIT %s OFFSET %s
-	""", [int(page_size), offset], as_dict=True)
-
-	total_row = frappe.db.sql("""
-		SELECT COUNT(*) AS cnt, ABS(SUM(gle.credit - gle.debit)) AS total_amount
-		FROM `tabGL Entry` gle
-		WHERE gle.docstatus = 1
-		  AND gle.is_cancelled = 0
-		  AND gle.voucher_type = 'Journal Entry'
-		  AND gle.party_type = 'Customer'
-		  AND gle.party IS NOT NULL
-		  AND gle.credit > gle.debit
-		  AND gle.account IN (
-			SELECT acc.name FROM `tabAccount` acc
-			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
-		  )
-		  AND NOT EXISTS (
-			SELECT 1 FROM `tabPayment Ledger Entry` ple
-			WHERE ple.voucher_no = gle.voucher_no
-			  AND ple.against_voucher_type = 'Sales Invoice'
-			  AND ple.docstatus = 1
-		  )
 	""", as_dict=True)
 
+	# ── Payment Entries with unallocated amount ────────────────────────────────
+	pe_rows = frappe.db.sql("""
+		SELECT
+			'Payment Entry'        AS entry_type,
+			pe.name                AS entry_name,
+			pe.posting_date,
+			pe.party               AS customer,
+			pe.party_name          AS customer_name,
+			pe.paid_to             AS account,
+			pe.unallocated_amount  AS unreconciled_amount,
+			pe.remarks             AS remarks
+		FROM `tabPayment Entry` pe
+		WHERE pe.docstatus = 1
+		  AND pe.party_type = 'Customer'
+		  AND pe.payment_type = 'Receive'
+		  AND pe.unallocated_amount > 0
+		ORDER BY pe.unallocated_amount DESC
+	""", as_dict=True)
+
+	# Combine, sort by amount desc, paginate
+	all_rows = sorted(
+		je_rows + pe_rows,
+		key=lambda r: flt(r.unreconciled_amount),
+		reverse=True
+	)
+	total        = len(all_rows)
+	total_amount = sum(flt(r.unreconciled_amount) for r in all_rows)
+	paged        = all_rows[offset: offset + int(page_size)]
+
+	# Counts by type
+	je_count  = sum(1 for r in all_rows if r.entry_type == "Journal Entry")
+	pe_count  = sum(1 for r in all_rows if r.entry_type == "Payment Entry")
+	je_amount = sum(flt(r.unreconciled_amount) for r in all_rows if r.entry_type == "Journal Entry")
+	pe_amount = sum(flt(r.unreconciled_amount) for r in all_rows if r.entry_type == "Payment Entry")
+
 	return {
-		"data":         rows,
-		"total":        total_row[0].cnt if total_row else 0,
-		"total_amount": flt(total_row[0].total_amount) if total_row else 0,
+		"data":         paged,
+		"total":        total,
+		"total_amount": total_amount,
+		"je_count":     je_count,
+		"pe_count":     pe_count,
+		"je_amount":    je_amount,
+		"pe_amount":    pe_amount,
 	}
 
 
