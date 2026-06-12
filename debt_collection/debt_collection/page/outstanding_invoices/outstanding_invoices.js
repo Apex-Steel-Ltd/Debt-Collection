@@ -343,33 +343,41 @@ class OutstandingInvoicesPage {
 		const fmt = (v) => format_currency(v, "KES");
 		const ageing_sorted = Object.entries(ageing).sort((a, b) => b[0].localeCompare(a[0]));
 		const ageing_html = ageing_sorted.map(([month, amt]) => `
-			<div class="dc-ageing-bucket">
-				<div class="dc-ageing-month">${month}</div>
-				<div class="dc-ageing-amt">${fmt(amt)}</div>
+			<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;
+			            padding:10px 14px;min-width:110px;">
+				<div style="font-size:11px;color:#718096;margin-bottom:3px;">${month}</div>
+				<div style="font-size:15px;font-weight:700;color:#2d3748;">${fmt(amt)}</div>
 			</div>
 		`).join("");
 
 		const invoice_rows = invoices.map((inv, i) => `
 			<tr>
-				<td><input type="checkbox" class="drawer-inv-check" data-inv='${JSON.stringify({
-					sales_invoice: inv.name, invoice_date: inv.invoice_date, due_date: inv.due_date,
-					overdue_days: inv.overdue_days, invoice_amount: inv.invoice_amount,
-					outstanding_amount: inv.outstanding_amount, pdc_amount: inv.pdc_amount,
-					pdc_date: inv.pdc_date, net_outstanding: inv.net_outstanding
-				})}'></td>
-				<td>${i + 1}</td>
-				<td><a href="/app/sales-invoice/${inv.name}" target="_blank">${inv.name}</a></td>
-				<td>${inv.payment_terms || "-"}</td>
-				<td>${inv.invoice_date || "-"}</td>
-				<td>${inv.due_date || "-"}</td>
-				<td style="color:${inv.overdue_days > 90 ? "#e53e3e" : inv.overdue_days > 30 ? "#dd6b20" : "#2d3748"};font-weight:700;">${inv.overdue_days}</td>
-				<td>${fmt(inv.invoice_amount)}</td>
-				<td>${fmt(inv.outstanding_amount)}</td>
-				<td>${fmt(inv.pdc_amount)}</td>
-				<td>${fmt(inv.net_outstanding)}</td>
-				<td>${inv.pdc_date || "-"}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;">
+					<input type="checkbox" class="drawer-inv-check" data-idx="${i}">
+				</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${i + 1}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">
+					<a href="/app/sales-invoice/${inv.name}" target="_blank">${inv.name}</a>
+				</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${inv.payment_terms || "-"}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${inv.invoice_date || "-"}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${inv.due_date || "-"}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;font-weight:700;
+				           color:${inv.overdue_days > 90 ? "#e53e3e" : inv.overdue_days > 30 ? "#dd6b20" : "#2d3748"};">
+					${inv.overdue_days}
+				</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${fmt(inv.invoice_amount)}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${fmt(inv.outstanding_amount)}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${fmt(inv.pdc_amount)}</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;font-weight:600;">
+					${fmt(inv.net_outstanding)}
+				</td>
+				<td style="padding:6px 8px;border-bottom:1px solid #edf2f7;font-size:12px;">${inv.pdc_date || "-"}</td>
 			</tr>
 		`).join("");
+
+		const th = `style="padding:8px;text-align:left;font-size:11px;font-weight:600;color:#4a5568;
+		                    border-bottom:2px solid #e2e8f0;white-space:nowrap;"`;
 
 		const d = new frappe.ui.Dialog({
 			title: customer,
@@ -378,22 +386,29 @@ class OutstandingInvoicesPage {
 				{
 					fieldtype: "HTML",
 					options: `
-						<p style="color:#718096;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Invoices and Follow Up Details</p>
-						<div class="dc-ageing-buckets">${ageing_html}</div>
-						<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px;">
-							<div>
-								<div style="font-weight:700;font-size:15px;">Outstanding Invoices</div>
-								<div style="color:#718096;font-size:12px;">${invoices.length} pending invoices</div>
-							</div>
+						<p style="color:#718096;font-size:12px;text-transform:uppercase;
+						          letter-spacing:1px;margin-bottom:10px;">
+							Invoices and Follow Up Details
+						</p>
+						<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
+							${ageing_html}
+						</div>
+						<div style="font-weight:700;font-size:15px;margin-bottom:4px;">
+							Outstanding Invoices
+						</div>
+						<div style="color:#718096;font-size:12px;margin-bottom:12px;">
+							${invoices.length} pending invoices
 						</div>
 						<div style="overflow-x:auto;">
-							<table class="dc-table dc-table-sm">
-								<thead>
+							<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
+								<thead style="background:#f7fafc;">
 									<tr>
-										<th></th><th>#</th><th>Trx No.</th><th>Terms</th>
-										<th>Inv Date</th><th>Due Date</th><th>Days</th>
-										<th>Inv Amt</th><th>Outstanding</th><th>PDC Amt</th>
-										<th>Net Outstanding</th><th>PDC Date</th>
+										<th ${th}></th>
+										<th ${th}>#</th><th ${th}>Trx No.</th><th ${th}>Terms</th>
+										<th ${th}>Inv Date</th><th ${th}>Due Date</th><th ${th}>Days</th>
+										<th ${th}>Inv Amt</th><th ${th}>Outstanding</th>
+										<th ${th}>PDC Amt</th><th ${th}>Net Outstanding</th>
+										<th ${th}>PDC Date</th>
 									</tr>
 								</thead>
 								<tbody>${invoice_rows}</tbody>
@@ -406,10 +421,25 @@ class OutstandingInvoicesPage {
 			primary_action: () => {
 				const selected = [];
 				d.$wrapper.find(".drawer-inv-check:checked").each((_, el) => {
-					selected.push(JSON.parse($(el).data("inv")));
+					const idx = parseInt($(el).data("idx"));
+					const inv = invoices[idx];
+					if (inv) selected.push({
+						sales_invoice:      inv.name,
+						invoice_date:       inv.invoice_date,
+						due_date:           inv.due_date,
+						overdue_days:       inv.overdue_days,
+						invoice_amount:     inv.invoice_amount,
+						outstanding_amount: inv.outstanding_amount,
+						pdc_amount:         inv.pdc_amount,
+						pdc_date:           inv.pdc_date,
+						net_outstanding:    inv.net_outstanding,
+					});
 				});
 				d.hide();
-				frappe.set_route("collection-follow-up-form", { customer, invoices: JSON.stringify(selected) });
+				frappe.set_route("collection-follow-up-form", {
+					customer,
+					invoices: JSON.stringify(selected),
+				});
 			},
 		});
 		d.show();
