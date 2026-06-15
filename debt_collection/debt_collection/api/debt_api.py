@@ -364,6 +364,11 @@ def get_dashboard_summary(collector=None):
 			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
 		  )
 		  AND NOT EXISTS (
+			SELECT 1 FROM `tabJournal Entry Account` jea
+			WHERE jea.name = gle.voucher_detail_no
+			  AND IFNULL(jea.reference_type, '') NOT IN ('', 'Sales Order', 'Purchase Order')
+		  )
+		  AND NOT EXISTS (
 			SELECT 1 FROM `tabPayment Ledger Entry` ple
 			WHERE ple.voucher_no = gle.voucher_no
 			  AND ple.against_voucher_type = 'Sales Invoice'
@@ -756,6 +761,11 @@ def get_je_unreconciled(page=1, page_size=50):
 		  AND gle.account IN (
 			SELECT acc.name FROM `tabAccount` acc
 			WHERE acc.account_type = 'Receivable' AND acc.is_group = 0
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM `tabJournal Entry Account` jea
+			WHERE jea.name = gle.voucher_detail_no
+			  AND IFNULL(jea.reference_type, '') NOT IN ('', 'Sales Order', 'Purchase Order')
 		  )
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabPayment Ledger Entry` ple
