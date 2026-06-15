@@ -535,17 +535,18 @@ def add_customers_to_plan(customers, week_start):
 
 		# Pull live stats
 		stats = _get_customer_stats(customer_name)
+		sp = stats.get("sales_person", "")
 		plan.append("customers", {
-			"customer": customer_name,
-			"customer_name": stats.get("customer_name", ""),
-			"sales_representative": stats.get("sales_person", ""),
-			"debt_collector": frappe.db.get_value("Customer", customer_name, "custom_debt_collector"),
-			"outstanding_amount": stats.get("outstanding_amount", 0),
-			"pdc_amount": stats.get("pdc_amount", 0),
-			"net_outstanding": stats.get("net_outstanding", 0),
-			"avg_overdue_days": stats.get("avg_overdue_days", 0),
-			"planner_invoices": stats.get("invoice_count", 0),
-			"status": "Planned",
+			"customer":            customer_name,
+			"customer_name":       stats.get("customer_name", ""),
+			"sales_representative": sp,
+			"debt_collector":      sp,  # sales person IS the collector
+			"outstanding_amount":  stats.get("outstanding_amount", 0),
+			"pdc_amount":          stats.get("pdc_amount", 0),
+			"net_outstanding":     stats.get("net_outstanding", 0),
+			"avg_overdue_days":    stats.get("avg_overdue_days", 0),
+			"planner_invoices":    stats.get("invoice_count", 0),
+			"status":              "Planned",
 		})
 		added.append(customer_name)
 
@@ -839,27 +840,36 @@ def get_active_plans():
 		ORDER BY wcp.start_date DESC
 	""", as_dict=True)
 
-	# Fetch customer rows per plan
+	# Fetch customer rows per plan, with live-resolved sales person as collector fallback
 	plan_names = [p.name for p in plans]
 	customers_map = {}
 	if plan_names:
 		ph = ", ".join(["%s"] * len(plan_names))
 		cust_rows = frappe.db.sql(f"""
 			SELECT
-				parent AS plan,
-				customer,
-				customer_name,
-				sales_representative,
-				debt_collector,
-				outstanding_amount,
-				pdc_amount,
-				net_outstanding,
-				avg_overdue_days,
-				planner_invoices,
-				status
-			FROM `tabWeekly Collection Plan Customer`
-			WHERE parent IN ({ph})
-			ORDER BY outstanding_amount DESC
+				wcpc.parent AS plan,
+				wcpc.customer,
+				wcpc.customer_name,
+				wcpc.sales_representative,
+				/* Live-resolve collector: use stored field, fall back to sales person */
+				COALESCE(
+					NULLIF(wcpc.debt_collector, ''),
+					c.custom_debt_collector,
+					(SELECT st.sales_person FROM `tabSales Team` st
+					 WHERE st.parent = wcpc.customer AND st.parenttype = 'Customer'
+					   AND st.sales_person IS NOT NULL AND st.sales_person != ''
+					 LIMIT 1)
+				) AS debt_collector,
+				wcpc.outstanding_amount,
+				wcpc.pdc_amount,
+				wcpc.net_outstanding,
+				wcpc.avg_overdue_days,
+				wcpc.planner_invoices,
+				wcpc.status
+			FROM `tabWeekly Collection Plan Customer` wcpc
+			LEFT JOIN `tabCustomer` c ON c.name = wcpc.customer
+			WHERE wcpc.parent IN ({ph})
+			ORDER BY wcpc.outstanding_amount DESC
 		""", plan_names, as_dict=True)
 		for cr in cust_rows:
 			customers_map.setdefault(cr.plan, []).append(cr)
