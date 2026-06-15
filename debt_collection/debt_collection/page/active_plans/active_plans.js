@@ -43,18 +43,13 @@ class ActivePlansPage {
 			ch.text(ch.text() === "▼" ? "▲" : "▼");
 		});
 
-		// Customer dropdown "View Invoices" button
+		// Customer name click → invoice drawer with follow-up
 		$(this.page.body).on("click", ".ap-view-customer-btn", (e) => {
 			e.stopPropagation();
-			const btn = $(e.currentTarget);
-			const card = btn.closest(".ap-plan-card");
-			const select = card.find(".ap-customer-select");
-			const customer = select.val();
-			const plan_name = card.data("plan");
-			if (!customer) {
-				frappe.msgprint("Please select a customer first.", "No Customer");
-				return;
-			}
+			const btn        = $(e.currentTarget);
+			const customer   = btn.data("customer");
+			const plan_name  = btn.data("plan");
+			if (!customer) return;
 			frappe.call({
 				method: "debt_collection.debt_collection.api.debt_api.get_customer_invoices",
 				args: { customer },
@@ -153,10 +148,8 @@ class ActivePlansPage {
 				             font-size:11px;font-weight:600;">${label}: ${count}</span>
 			` : "";
 
-			// Customer select dropdown options
-			const cust_options = (p.customers || []).map(c =>
-				`<option value="${c.customer}">${c.customer_name || c.customer}</option>`
-			).join("");
+			// Customer select dropdown options — no longer needed (customers are directly clickable)
+
 
 			// Customer rows in the expanded body
 			const cust_rows = (p.customers || []).map(c => {
@@ -171,8 +164,14 @@ class ActivePlansPage {
 					    onmouseover="this.style.background='#f7fafc'"
 					    onmouseout="this.style.background=''">
 						<td style="padding:8px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
-						           font-weight:600;color:#2d3748;">
-							${c.customer_name || c.customer}
+						           font-weight:600;">
+							<button class="ap-view-customer-btn"
+							        data-customer="${c.customer}"
+							        data-plan="${p.name}"
+							        style="background:none;border:none;color:#2b6cb0;cursor:pointer;
+							               font-size:13px;font-weight:600;padding:0;text-align:left;">
+								${c.customer_name || c.customer}
+							</button>
 						</td>
 						<td style="padding:8px 12px;border-bottom:1px solid #edf2f7;font-size:12px;
 						           color:#553c9a;">${c.sales_representative || "—"}</td>
@@ -251,30 +250,9 @@ class ActivePlansPage {
 						</div>
 					</div>
 
-					<!-- Body: customer table + follow-up dropdown -->
+					<!-- Body: customer table -->
 					<div class="ap-plan-body"
 					     style="display:none;border-top:1px solid #edf2f7;padding:0;background:#fafafa;">
-
-						<!-- Customer selector for follow-up -->
-						<div style="padding:12px 20px;border-bottom:1px solid #edf2f7;
-						            display:flex;gap:10px;align-items:center;background:#fff;">
-							<label style="font-size:12px;font-weight:600;color:#4a5568;white-space:nowrap;">
-								Start Follow Up:
-							</label>
-							<select class="ap-customer-select"
-							        style="height:30px;border:1px solid #cbd5e0;border-radius:4px;
-							               padding:0 8px;font-size:12px;color:#2d3748;
-							               background:#fff;flex:1;max-width:340px;">
-								<option value="">— Select Customer —</option>
-								${cust_options}
-							</select>
-							<button class="ap-view-customer-btn"
-							        style="height:30px;padding:0 14px;border:none;border-radius:4px;
-							               background:#2b6cb0;color:#fff;font-size:12px;
-							               font-weight:600;cursor:pointer;">
-								View Invoices →
-							</button>
-						</div>
 
 						<div style="overflow-x:auto;">
 							<table style="width:100%;border-collapse:collapse;font-size:13px;">
