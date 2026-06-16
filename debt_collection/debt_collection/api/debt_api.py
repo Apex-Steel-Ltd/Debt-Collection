@@ -454,9 +454,25 @@ def get_dashboard_summary(collector=None):
 		LIMIT 10
 	""", recent_params, as_dict=True)
 
+	# ── True AR Balance from GL Entries ──────────────────────────────────────────
+	true_ar = frappe.db.sql(f"""
+		SELECT SUM(gle.debit - gle.credit) AS true_outstanding
+		FROM `tabGL Entry` gle
+		LEFT JOIN `tabCustomer` c ON c.name = gle.party
+		WHERE gle.party_type = 'Customer'
+		  AND gle.is_cancelled = 0
+		  AND gle.posting_date <= %s
+		  AND gle.account IN (SELECT name FROM `tabAccount` WHERE account_type = 'Receivable' AND is_group = 0)
+		  {collector_cond}
+	""", [today] + collector_params, as_dict=True)
+
 	summary           = totals[0] if totals else {}
 	total_pdc         = flt(pdc_total[0].total_pdc) if pdc_total else 0
-	total_outstanding = flt(summary.get("total_outstanding", 0))
+	
+	# The True AR balance inherently includes all invoices, credit notes, and unreconciled payments/JEs.
+	total_outstanding = flt(true_ar[0].true_outstanding) if true_ar else 0
+	
+	summary["total_outstanding"] = total_outstanding
 	summary["total_pdc"]         = total_pdc
 	summary["net_outstanding"]   = total_outstanding - total_pdc
 	summary["pdc_ageing"]        = pdc_ageing[0] if pdc_ageing else {}
