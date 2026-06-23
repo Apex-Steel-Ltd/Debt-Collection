@@ -365,7 +365,9 @@ def get_dashboard_summary(collector=None):
 		  )
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabJournal Entry Account` jea
-			WHERE (jea.name = gle.voucher_detail_no OR (IFNULL(gle.voucher_detail_no, '') = '' AND jea.parent = gle.voucher_no AND jea.account = gle.account AND IFNULL(jea.party, '') = IFNULL(gle.party, '')))
+			WHERE jea.parent = gle.voucher_no
+			  AND jea.account = gle.account
+			  AND jea.party = gle.party
 			  AND IFNULL(jea.reference_type, '') NOT IN ('', 'Sales Order', 'Purchase Order')
 		  )
 		  AND NOT EXISTS (
@@ -780,7 +782,9 @@ def get_je_unreconciled(page=1, page_size=50):
 		  )
 		  AND NOT EXISTS (
 			SELECT 1 FROM `tabJournal Entry Account` jea
-			WHERE (jea.name = gle.voucher_detail_no OR (IFNULL(gle.voucher_detail_no, '') = '' AND jea.parent = gle.voucher_no AND jea.account = gle.account AND IFNULL(jea.party, '') = IFNULL(gle.party, '')))
+			WHERE jea.parent = gle.voucher_no
+			  AND jea.account = gle.account
+			  AND jea.party = gle.party
 			  AND IFNULL(jea.reference_type, '') NOT IN ('', 'Sales Order', 'Purchase Order')
 		  )
 		  AND NOT EXISTS (
