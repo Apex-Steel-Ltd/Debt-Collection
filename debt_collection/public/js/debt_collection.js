@@ -73,9 +73,20 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 				<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
 					${ageing_html}
 				</div>
-				<div style="font-weight:700;font-size:15px;margin-bottom:4px;">Outstanding Invoices</div>
-				<div style="color:#718096;font-size:12px;margin-bottom:12px;">
-					${invoices.length} pending invoice${invoices.length !== 1 ? "s" : ""}
+				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+					<div>
+						<div style="font-weight:700;font-size:15px;">Outstanding Invoices</div>
+						<div style="color:#718096;font-size:12px;">
+							${invoices.length} pending invoice${invoices.length !== 1 ? "s" : ""}
+						</div>
+					</div>
+					${with_fu ? `
+					<label style="display:flex;align-items:center;gap:6px;font-size:13px;
+					              color:#4a5568;cursor:pointer;font-weight:600;">
+						<input type="checkbox" id="dci-select-all"
+						       style="width:14px;height:14px;cursor:pointer;">
+						Select All
+					</label>` : ""}
 				</div>
 				<div style="overflow-x:auto;">
 					<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
@@ -124,12 +135,23 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 				});
 			});
 			d.hide();
-			const params = { customer, invoices: JSON.stringify(selected) };
-			if (opts.plan_name) params.weekly_collection_plan = opts.plan_name;
-			frappe.set_route("collection-follow-up-form", params);
+			// Use window.location to avoid frappe.set_route mangling the JSON
+			let url = `/app/collection-follow-up-form?customer=${encodeURIComponent(customer)}`;
+			url    += `&invoices=${encodeURIComponent(JSON.stringify(selected))}`;
+			if (opts.plan_name) url += `&weekly_collection_plan=${encodeURIComponent(opts.plan_name)}`;
+			window.location.href = url;
 		};
 	}
 
 	const d = new frappe.ui.Dialog(dialog_opts);
 	d.show();
+
+	// Wire Select All after dialog renders
+	if (with_fu) {
+		setTimeout(() => {
+			d.$wrapper.find("#dci-select-all").on("change", function() {
+				d.$wrapper.find(".dci-check").prop("checked", this.checked);
+			});
+		}, 100);
+	}
 };
