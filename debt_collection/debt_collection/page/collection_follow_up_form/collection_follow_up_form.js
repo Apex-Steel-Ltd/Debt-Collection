@@ -15,7 +15,7 @@ class CollectionFollowUpFormPage {
 		this.pre_weekly_plan = frappe.utils.get_url_arg("weekly_collection_plan") || "";
 		try {
 			const inv_param = frappe.utils.get_url_arg("invoices");
-			if (inv_param) this.pre_selected_invoices = JSON.parse(decodeURIComponent(inv_param));
+			if (inv_param) this.pre_selected_invoices = JSON.parse(inv_param);
 		} catch (e) { /* ignore */ }
 
 		this.all_invoices = [];
