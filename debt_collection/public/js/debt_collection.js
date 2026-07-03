@@ -135,9 +135,10 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 				});
 			});
 			d.hide();
-			// Use window.location to avoid frappe.set_route mangling the JSON
+			// Store invoices in sessionStorage to avoid URL encoding issues
+			sessionStorage.setItem("dc_followup_invoices", JSON.stringify(selected));
+			// Navigate with only safe scalar params in URL
 			let url = `/app/collection-follow-up-form?customer=${encodeURIComponent(customer)}`;
-			url    += `&invoices=${encodeURIComponent(JSON.stringify(selected))}`;
 			if (opts.plan_name) url += `&weekly_collection_plan=${encodeURIComponent(opts.plan_name)}`;
 			window.location.href = url;
 		};
