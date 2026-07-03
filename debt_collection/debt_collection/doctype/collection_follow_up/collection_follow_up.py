@@ -130,15 +130,11 @@ class CollectionFollowUp(Document):
 
 				<div style="background:#fff5f5;border-left:4px solid #e53e3e;padding:12px 16px;border-radius:4px;margin:16px 0;">
 					<strong>Method of Contact:</strong> {self.contact_method}<br/>
-					<strong>Next Follow-Up Date:</strong> {self.next_follow_up_date or 'TBD'}
+					<strong>Next Follow-Up Date:</strong> {self.next_follow_up_date or 'TBD'}<br/>
+					<strong>Remarks:</strong> {self.remarks or ''}
 				</div>
 
 				{invoice_table}
-
-				<div style="margin-top:24px;background:#f7fafc;padding:16px;border-radius:6px;">
-					<strong>Remarks:</strong>
-					<p style="margin:8px 0 0;">{self.remarks or ''}</p>
-				</div>
 
 				<p style="margin-top:24px;">
 					Please arrange for prompt payment or contact us to discuss payment arrangements.
