@@ -35,7 +35,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 	                                font-size:12px;color:#2d3748;${extra || ""}"`;
 
 	const invoice_rows = invoices.map((inv, i) => `
-		<tr onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='transparent'">
+		<tr class="dc-tr-hover" style="transition:background .1s;">
 			${with_fu ? `<td ${td()}><input type="checkbox" class="dci-check" data-idx="${i}"></td>` : ""}
 			<td ${td()}>${i + 1}</td>
 			<td ${td()}>
@@ -66,6 +66,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 		fields: [{
 			fieldtype: "HTML",
 			options: `
+				<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 				<p style="color:#718096;font-size:12px;text-transform:uppercase;
 				          letter-spacing:1px;margin-bottom:10px;">
 					Invoices and Follow Up Details

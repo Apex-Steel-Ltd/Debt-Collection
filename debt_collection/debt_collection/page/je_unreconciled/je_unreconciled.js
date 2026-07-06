@@ -29,6 +29,7 @@ class UnreconciledPage {
 	_render_skeleton() {
 		$(this.page.body).html(`
 			<div style="padding:20px;">
+				<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 				<!-- Info banner -->
 				<div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;
 				            padding:14px 18px;margin-bottom:20px;font-size:13px;color:#4a5568;line-height:1.6;">
@@ -149,8 +150,7 @@ class UnreconciledPage {
 			const app_url  = is_pe ? "payment-entry" : "journal-entry";
 			const recon_url = `/app/payment-reconciliation?party_type=Customer&party=${encodeURIComponent(r.customer)}`;
 			return `
-				<tr onmouseover="this.style.background='#f7fafc'"
-				    onmouseout="this.style.background='transparent'">
+				<tr class="dc-tr-hover" style="transition:background .1s;">
 					<td ${td()}>${type_tag}</td>
 					<td ${td()}>
 						<a href="/app/${app_url}/${r.entry_name}" target="_blank"

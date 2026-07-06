@@ -28,6 +28,7 @@ class ActivePlansPage {
 
 	_render_skeleton() {
 		$(this.page.body).html(`
+			<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 			<div style="padding:20px;">
 				<div id="ap-summary" style="margin-bottom:20px;"></div>
 				<div id="ap-plans"></div>
@@ -160,9 +161,7 @@ class ActivePlansPage {
 				}[c.status] || { bg: "#edf2f7", fg: "#4a5568" };
 
 				return `
-					<tr style="transition:background .1s;"
-					    onmouseover="this.style.background='#f7fafc'"
-					    onmouseout="this.style.background='transparent'">
+					<tr class="dc-tr-hover" style="transition:background .1s;">
 						<td style="padding:8px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
 						           font-weight:600;">
 							<button class="ap-view-customer-btn"

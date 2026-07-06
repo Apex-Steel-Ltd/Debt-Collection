@@ -34,6 +34,7 @@ class CollectionFollowUpFormPage {
 
 	render_layout() {
 		$(this.page.body).html(`
+			<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 			<div style="display:grid;grid-template-columns:380px 1fr;gap:24px;
 			            padding:20px;min-height:calc(100vh - 120px);">
 				<div style="overflow-y:auto;padding-right:8px;">
@@ -296,8 +297,7 @@ class CollectionFollowUpFormPage {
 		const rows = invoices.map((inv, i) => {
 			const checked = pre.some(p => p.sales_invoice === inv.name);
 			return `
-				<tr onmouseover="this.style.background='#f7fafc'"
-				    onmouseout="this.style.background='transparent'">
+				<tr class="dc-tr-hover" style="transition:background .1s;">
 					<td ${td()}><input type="checkbox" class="fu-inv-check"
 					              data-idx="${i}" ${checked ? "checked" : ""}></td>
 					<td ${td()}>${i + 1}</td>

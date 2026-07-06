@@ -38,6 +38,7 @@ class DebtCollectionDashboard {
 	_render_skeleton() {
 		$(this.page.body).html(`
 			<div style="padding:20px;">
+				<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 				<div id="dc-summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;"></div>
 				<div id="dc-aging-wrap" style="margin-top:20px;"></div>
 				<div id="dc-pdc-aging-wrap" style="margin-top:20px;"></div>
@@ -171,11 +172,9 @@ class DebtCollectionDashboard {
 
 		// ── Collection Priority ────────────────────────────────────────────────
 		const priority_rows = (top_customers || []).map(c => `
-			<div style="display:flex;justify-content:space-between;align-items:center;
+			<div class="dc-tr-hover" style="display:flex;justify-content:space-between;align-items:center;
 			            padding:12px 18px;border-bottom:1px solid #edf2f7;cursor:pointer;
 			            transition:background .12s;"
-			     onmouseover="this.style.background='#f7fafc'"
-			     onmouseout="this.style.background='transparent'"
 			     onclick="frappe.set_route('outstanding-invoices')">
 				<div>
 					<div style="font-weight:600;font-size:13px;color:#2d3748;">
