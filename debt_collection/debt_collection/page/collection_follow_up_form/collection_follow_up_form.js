@@ -273,6 +273,10 @@ class CollectionFollowUpFormPage {
 			callback: (r) => {
 				if (!r.message) return;
 				this.all_invoices = r.message.invoices;
+				if (pre && pre.length > 0) {
+					const pre_names = pre.map(p => p.sales_invoice);
+					this.all_invoices = this.all_invoices.filter(inv => pre_names.includes(inv.name));
+				}
 				this.render_invoice_table(this.all_invoices, pre);
 			},
 		});
@@ -293,7 +297,7 @@ class CollectionFollowUpFormPage {
 			const checked = pre.some(p => p.sales_invoice === inv.name);
 			return `
 				<tr onmouseover="this.style.background='#f7fafc'"
-				    onmouseout="this.style.background=''">
+				    onmouseout="this.style.background='transparent'">
 					<td ${td()}><input type="checkbox" class="fu-inv-check"
 					              data-idx="${i}" ${checked ? "checked" : ""}></td>
 					<td ${td()}>${i + 1}</td>
