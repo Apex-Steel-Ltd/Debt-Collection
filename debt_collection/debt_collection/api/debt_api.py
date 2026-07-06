@@ -914,6 +914,37 @@ def get_active_plans():
 
 
 @frappe.whitelist()
+def get_contact_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Link field search for Contact filtered by customer."""
+	customer = (filters or {}).get("customer", "")
+	return frappe.db.sql("""
+		SELECT DISTINCT c.name, c.full_name
+		FROM `tabContact` c
+		INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+			AND dl.link_doctype = 'Customer'
+			AND dl.link_name = %s
+		WHERE c.name LIKE %s OR c.full_name LIKE %s
+		ORDER BY c.full_name
+		LIMIT %s OFFSET %s
+	""", (customer, f"%{txt}%", f"%{txt}%", page_len, start))
+
+
+@frappe.whitelist()
+def get_contacts_for_customer(customer):
+	"""Return contacts linked to a customer, for the Contact Person field."""
+	rows = frappe.db.sql("""
+		SELECT DISTINCT c.name, c.full_name AS contact_name, ce.email_id
+		FROM `tabContact` c
+		INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+			AND dl.link_doctype = 'Customer'
+			AND dl.link_name = %s
+		LEFT JOIN `tabContact Email` ce ON ce.parent = c.name AND ce.is_primary = 1
+		ORDER BY c.full_name
+	""", customer, as_dict=True)
+	return rows
+
+
+@frappe.whitelist()
 def get_collectors():
 	"""Return all users assigned as debt collector on any customer."""
 	rows = frappe.db.sql("""

@@ -93,7 +93,12 @@ class CollectionFollowUpFormPage {
 			{ fieldtype: "Link", fieldname: "customer", label: "Customer",
 			  options: "Customer", reqd: 1,
 			  change: () => {
-				this.customer = this.form_fields.customer.get_value();
+				const new_customer = this.form_fields.customer.get_value();
+				if (new_customer !== this.customer) {
+					// Only clear pre-selections if customer actually changed
+					this.pre_selected_invoices = [];
+				}
+				this.customer = new_customer;
 				this._load_cc_contacts();
 				this.load_invoices();
 			  }
@@ -102,7 +107,13 @@ class CollectionFollowUpFormPage {
 			  reqd: 1, options: "Call\nEmail\nPhysical Visit\nSMS\nWhatsApp" },
 			{ fieldtype: "Link", fieldname: "contact_person", label: "Contact Person",
 			  options: "Contact",
-			  get_query: () => ({ filters: { link_doctype: "Customer", link_name: this.customer } })
+			  get_query: () => {
+				// Use a server-side method that doesn't require Dynamic Link read permission
+				return {
+					query: "debt_collection.debt_collection.api.debt_api.get_contact_query",
+					filters: { customer: this.customer },
+				};
+			  },
 			},
 			{ fieldtype: "Date", fieldname: "next_follow_up_date", label: "Next Follow-Up Date" },
 			{ fieldtype: "Attach", fieldname: "supporting_document", label: "Supporting Document" },
@@ -245,25 +256,31 @@ class CollectionFollowUpFormPage {
 
 	set_customer(customer) {
 		this.customer = customer;
+		// Set value silently — use set_value which won't re-trigger change if already set
 		this.form_fields.customer.set_value(customer);
 		this._load_cc_contacts && this._load_cc_contacts();
+		// Load invoices directly — don't wait for the Link field change event
 		this.load_invoices();
 	}
 
 	load_invoices() {
 		if (!this.customer) return;
+		// Snapshot pre-selections before async call
+		const pre = this.pre_selected_invoices.slice();
 		frappe.call({
 			method: "debt_collection.debt_collection.api.debt_api.get_customer_invoices",
 			args: { customer: this.customer },
 			callback: (r) => {
 				if (!r.message) return;
 				this.all_invoices = r.message.invoices;
-				this.render_invoice_table(this.all_invoices);
+				this.render_invoice_table(this.all_invoices, pre);
 			},
 		});
 	}
 
-	render_invoice_table(invoices) {
+	render_invoice_table(invoices, pre_selected) {
+		// pre_selected can be passed in, or fall back to this.pre_selected_invoices
+		const pre = pre_selected || this.pre_selected_invoices;
 		const fmt = (v) => format_currency(v, "KES");
 		$("#fu-inv-count").text(`${invoices.length} pending invoice${invoices.length !== 1 ? "s" : ""}`);
 
@@ -273,12 +290,12 @@ class CollectionFollowUpFormPage {
 		                                font-size:12px;color:#2d3748;${extra||""}"`;
 
 		const rows = invoices.map((inv, i) => {
-			const pre = this.pre_selected_invoices.some(p => p.sales_invoice === inv.name);
+			const checked = pre.some(p => p.sales_invoice === inv.name);
 			return `
 				<tr onmouseover="this.style.background='#f7fafc'"
 				    onmouseout="this.style.background=''">
 					<td ${td()}><input type="checkbox" class="fu-inv-check"
-					              data-idx="${i}" ${pre ? "checked" : ""}></td>
+					              data-idx="${i}" ${checked ? "checked" : ""}></td>
 					<td ${td()}>${i + 1}</td>
 					<td ${td()}>
 						<a href="/app/sales-invoice/${inv.name}" target="_blank"
