@@ -175,7 +175,7 @@ class DebtCollectionDashboard {
 			            padding:12px 18px;border-bottom:1px solid #edf2f7;cursor:pointer;
 			            transition:background .12s;"
 			     onmouseover="this.style.background='#f7fafc'"
-			     onmouseout="this.style.background=''"
+			     onmouseout="this.style.background='transparent'"
 			     onclick="frappe.set_route('outstanding-invoices')">
 				<div>
 					<div style="font-weight:600;font-size:13px;color:#2d3748;">

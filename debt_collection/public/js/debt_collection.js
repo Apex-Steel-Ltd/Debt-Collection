@@ -35,7 +35,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 	                                font-size:12px;color:#2d3748;${extra || ""}"`;
 
 	const invoice_rows = invoices.map((inv, i) => `
-		<tr onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background=''">
+		<tr onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='transparent'">
 			${with_fu ? `<td ${td()}><input type="checkbox" class="dci-check" data-idx="${i}"></td>` : ""}
 			<td ${td()}>${i + 1}</td>
 			<td ${td()}>

@@ -220,7 +220,7 @@ class OutstandingInvoicesPage {
 
 		const row_html = rows.map(r => `
 			<tr style="transition:background .1s;" onmouseover="this.style.background='#f7fafc'"
-			    onmouseout="this.style.background=''">
+			    onmouseout="this.style.background='transparent'">
 				<td ${td_base}><input type="checkbox" class="oi-row-check" data-customer="${r.customer}"></td>
 				<td ${td_base}>
 					<button class="oi-view-btn" data-customer="${r.customer}"

@@ -150,7 +150,7 @@ class UnreconciledPage {
 			const recon_url = `/app/payment-reconciliation?party_type=Customer&party=${encodeURIComponent(r.customer)}`;
 			return `
 				<tr onmouseover="this.style.background='#f7fafc'"
-				    onmouseout="this.style.background=''">
+				    onmouseout="this.style.background='transparent'">
 					<td ${td()}>${type_tag}</td>
 					<td ${td()}>
 						<a href="/app/${app_url}/${r.entry_name}" target="_blank"

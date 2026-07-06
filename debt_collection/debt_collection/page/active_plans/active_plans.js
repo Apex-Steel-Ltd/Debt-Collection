@@ -162,7 +162,7 @@ class ActivePlansPage {
 				return `
 					<tr style="transition:background .1s;"
 					    onmouseover="this.style.background='#f7fafc'"
-					    onmouseout="this.style.background=''">
+					    onmouseout="this.style.background='transparent'">
 						<td style="padding:8px 12px;border-bottom:1px solid #edf2f7;font-size:13px;
 						           font-weight:600;">
 							<button class="ap-view-customer-btn"
