@@ -132,6 +132,18 @@ class CollectionFollowUpFormPage {
 			});
 			field.refresh();
 			this.form_fields[f.fieldname] = field;
+
+			if (f.fieldname === "contact_person") {
+				const btn = $(`<div style="font-size:11px;margin-top:4px;text-align:right;">
+					<a href="#" style="color:#2b6cb0;text-decoration:none;">+ Create New Contact</a>
+				</div>`).appendTo(w);
+				btn.find("a").on("click", (e) => {
+					e.preventDefault();
+					frappe.new_doc("Contact", {
+						links: [{link_doctype: "Customer", link_name: this.customer}]
+					});
+				});
+			}
 		});
 
 		if (this.customer) {
@@ -143,19 +155,18 @@ class CollectionFollowUpFormPage {
 	_setup_cc_contacts() {
 		const $search = $("#fu-cc-search");
 		const $dropdown = $("#fu-cc-dropdown");
-		let contacts_cache = [];
+		let search_timeout = null;
 
 		$search.on("input", () => {
-			const q = $search.val().toLowerCase();
-			const filtered = contacts_cache.filter(c =>
-				c.name.toLowerCase().includes(q) ||
-				(c.email || "").toLowerCase().includes(q)
-			);
-			this._render_cc_dropdown(filtered);
+			const q = $search.val();
+			if (search_timeout) clearTimeout(search_timeout);
+			search_timeout = setTimeout(() => {
+				this._search_all_contacts(q);
+			}, 300);
 		});
 
 		$search.on("focus", () => {
-			if (contacts_cache.length) this._render_cc_dropdown(contacts_cache);
+			this._search_all_contacts($search.val());
 		});
 
 		$(document).on("click.cc_close", (e) => {
@@ -164,38 +175,45 @@ class CollectionFollowUpFormPage {
 			}
 		});
 
-		// Load contacts when customer is set
 		this._load_cc_contacts = () => {
-			if (!this.customer) return;
-			frappe.call({
-				method: "frappe.client.get_list",
-				args: {
-					doctype: "Contact",
-					filters: [["Dynamic Link", "link_doctype", "=", "Customer"],
-					          ["Dynamic Link", "link_name",  "=", this.customer]],
-					fields: ["name", "first_name", "last_name", "email_id"],
-					limit: 50,
-				},
-				callback: (r) => {
-					contacts_cache = (r.message || []).map(c => ({
-						name:  c.name,
-						label: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.name,
-						email: c.email_id || "",
-					}));
-					this._render_cc_dropdown(contacts_cache);
-				},
-			});
+			// No longer load on customer change since we search globally
 		};
 	}
 
-	_render_cc_dropdown(contacts) {
+	_search_all_contacts(q) {
+		const filters = [];
+		if (q) {
+			filters.push(["name", "like", `%${q}%`]);
+			filters.push(["first_name", "like", `%${q}%`]);
+			filters.push(["last_name", "like", `%${q}%`]);
+			filters.push(["email_id", "like", `%${q}%`]);
+		}
+
+		frappe.call({
+			method: "frappe.client.get_list",
+			args: {
+				doctype: "Contact",
+				or_filters: filters.length ? filters : null,
+				fields: ["name", "first_name", "last_name", "email_id"],
+				limit: 20,
+			},
+			callback: (r) => {
+				const contacts = (r.message || []).map(c => ({
+					name:  c.name,
+					label: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.name,
+					email: c.email_id || "",
+				}));
+				this._render_cc_dropdown(contacts, q);
+			},
+		});
+	}
+
+	_render_cc_dropdown(contacts, q) {
 		const $dropdown = $("#fu-cc-dropdown");
 		const selected_names = new Set(this.cc_contacts.map(c => c.name));
 		const items = contacts.filter(c => !selected_names.has(c.name));
 
-		if (!items.length) { $dropdown.hide(); return; }
-
-		$dropdown.html(items.map(c => `
+		let html = items.map(c => `
 			<div class="fu-cc-item" data-name="${c.name}" data-email="${c.email}"
 			     data-label="${c.label}"
 			     style="padding:8px 12px;cursor:pointer;font-size:13px;
@@ -203,7 +221,18 @@ class CollectionFollowUpFormPage {
 				<div style="font-weight:600;color:#2d3748;">${c.label}</div>
 				<div style="font-size:11px;color:#718096;">${c.email || "No email"}</div>
 			</div>
-		`).join("")).show();
+		`).join("");
+
+		// Always show a Create New Contact option at the bottom
+		html += `
+			<div class="fu-cc-create-new" 
+			     style="padding:8px 12px;cursor:pointer;font-size:13px;
+			            background:#f7fafc;color:#2b6cb0;font-weight:600;text-align:center;">
+				+ Create New Contact
+			</div>
+		`;
+
+		$dropdown.html(html).show();
 
 		// Position below the wrap
 		const wrap = document.getElementById("fu-cc-wrap");
@@ -219,6 +248,14 @@ class CollectionFollowUpFormPage {
 			this._add_cc({ name: el.data("name"), label: el.data("label"), email: el.data("email") });
 			$("#fu-cc-search").val("").focus();
 			$dropdown.hide();
+		});
+
+		$dropdown.find(".fu-cc-create-new").on("click", (e) => {
+			$dropdown.hide();
+			frappe.new_doc("Contact", {
+				first_name: q || "",
+				links: this.customer ? [{link_doctype: "Customer", link_name: this.customer}] : []
+			});
 		});
 	}
 
