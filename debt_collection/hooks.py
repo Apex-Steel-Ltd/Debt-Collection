@@ -250,3 +250,10 @@ app_include_js = "/assets/debt_collection/js/debt_collection.js"
 fixtures = [
     "Custom Field"
 ]
+scheduler_events = {
+	"cron": {
+		"0 7 * * *": [
+			"debt_collection.debt_collection.tasks.send_daily_reminders"
+		]
+	}
+}

@@ -9,9 +9,26 @@ class WeeklyCollectionPlan(Document):
 			if getdate(self.start_date) > getdate(self.end_date):
 				frappe.throw("Start Date cannot be after End Date")
 
+	def before_save(self):
+		self._update_customer_status()
+
 	def before_insert(self):
 		# Check for duplicate: same customer in same week range
 		self._validate_no_duplicate_customers()
+
+	def _update_customer_status(self):
+		for row in self.customers:
+			collected = frappe.utils.flt(row.collected_amount)
+			net = frappe.utils.flt(row.net_outstanding)
+
+			# If they manually skipped it, let it remain skipped, otherwise update based on amounts
+			if row.status != "Skipped":
+				if collected >= net and net > 0:
+					row.status = "Collected"
+				elif collected > 0:
+					row.status = "In Progress"
+				elif collected == 0 and row.status in ["In Progress", "Collected"]:
+					row.status = "Planned"
 
 	def _validate_no_duplicate_customers(self):
 		for row in self.customers:

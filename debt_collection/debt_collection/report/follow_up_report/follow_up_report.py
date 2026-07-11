@@ -62,6 +62,12 @@ def get_columns():
 			"width": 180
 		},
 		{
+			"fieldname": "next_follow_up_date",
+			"label": _("Next Follow-Up Date"),
+			"fieldtype": "Date",
+			"width": 140
+		},
+		{
 			"fieldname": "remarks",
 			"label": _("Remarks"),
 			"fieldtype": "Data",
@@ -100,6 +106,7 @@ def get_data(filters):
 			(SELECT full_name FROM `tabUser` WHERE name = cfu.owner) as collector_name,
 			cfu.contact_method,
 			cfu.remarks,
+			cfu.next_follow_up_date,
 			(
 				SELECT SUM(outstanding_amount) 
 				FROM `tabCollection Follow Up Invoice` cfui 

@@ -146,6 +146,36 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 	}
 
 	const d = new frappe.ui.Dialog(dialog_opts);
+	
+	// Add secondary action for sending invoices
+	d.add_custom_action("Send Invoices to Customer", () => {
+		const selected = [];
+		if (with_fu) {
+			d.$wrapper.find(".dci-check:checked").each((_, el) => {
+				const inv = invoices[parseInt($(el).data("idx"))];
+				if (inv) selected.push(inv);
+			});
+		}
+		const to_send = selected.length > 0 ? selected : invoices;
+		
+		frappe.confirm(`Are you sure you want to email ${to_send.length} invoice(s) to ${customer}?`, () => {
+			frappe.call({
+				method: "debt_collection.debt_collection.api.debt_api.send_outstanding_invoices_email",
+				args: {
+					customer: customer,
+					invoices: JSON.stringify(to_send)
+				},
+				freeze: true,
+				freeze_message: "Sending email...",
+				callback: function(r) {
+					if (!r.exc) {
+						// Optional: auto-hide the dialog?
+					}
+				}
+			});
+		});
+	});
+
 	d.show();
 
 	// Wire Select All after dialog renders

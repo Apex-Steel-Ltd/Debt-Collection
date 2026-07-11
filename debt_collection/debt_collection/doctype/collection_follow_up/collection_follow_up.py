@@ -21,7 +21,10 @@ class CollectionFollowUp(Document):
 		self.flags.email_sent = True
 
 	def send_follow_up_email(self):
-		"""Send follow-up email to contact person and CC the debt collector."""
+		"""Send follow-up email to contact person and CC the debt collector, owner, and default collectors."""
+		if not frappe.db.get_single_value("Debt Collection Settings", "send_emails"):
+			return
+
 		recipients = []
 		cc_list = []
 
@@ -50,10 +53,28 @@ class CollectionFollowUp(Document):
 			if collector_email:
 				cc_list.append(collector_email)
 
+		# CC: doc owner
+		if self.owner:
+			owner_email = frappe.db.get_value("User", self.owner, "email")
+			if owner_email and owner_email not in cc_list:
+				cc_list.append(owner_email)
+
+		# CC: default collectors from Settings
+		settings = frappe.get_doc("Debt Collection Settings")
+		if settings.default_collectors:
+			for row in settings.default_collectors:
+				if row.collector:
+					c_email = frappe.db.get_value("User", row.collector, "email")
+					if c_email and c_email not in cc_list:
+						cc_list.append(c_email)
+
 		# CC: additional contacts from cc_contacts field
 		if self.cc_contacts:
 			extra = [e.strip() for e in self.cc_contacts.replace("\n", ",").split(",") if e.strip()]
 			cc_list.extend(extra)
+
+		# Remove duplicates
+		cc_list = list(set(cc_list))
 
 		# Build email body
 		subject = f"Payment Follow-Up: {self.customer_name or self.customer}"
