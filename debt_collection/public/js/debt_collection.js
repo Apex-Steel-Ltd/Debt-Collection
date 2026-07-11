@@ -81,13 +81,22 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 							${invoices.length} pending invoice${invoices.length !== 1 ? "s" : ""}
 						</div>
 					</div>
-					${with_fu ? `
-					<label style="display:flex;align-items:center;gap:6px;font-size:13px;
-					              color:#4a5568;cursor:pointer;font-weight:600;">
-						<input type="checkbox" id="dci-select-all"
-						       style="width:14px;height:14px;cursor:pointer;">
-						Select All
-					</label>` : ""}
+					<div style="display:flex;align-items:center;gap:12px;">
+						<button id="dci-send-invoices" 
+						        style="padding:4px 12px;border:1px solid #cbd5e0;border-radius:4px;
+						               background:#fff;color:#2b6cb0;font-size:12px;cursor:pointer;
+						               font-weight:600;display:flex;align-items:center;gap:6px;">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+							Send Invoices to Customer
+						</button>
+						${with_fu ? `
+						<label style="display:flex;align-items:center;gap:6px;font-size:13px;
+						              color:#4a5568;cursor:pointer;font-weight:600;">
+							<input type="checkbox" id="dci-select-all"
+							       style="width:14px;height:14px;cursor:pointer;">
+							Select All
+						</label>` : ""}
+					</div>
 				</div>
 				<div style="overflow-x:auto;">
 					<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
@@ -146,44 +155,45 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 	}
 
 	const d = new frappe.ui.Dialog(dialog_opts);
-	
-	// Add secondary action for sending invoices
-	d.add_custom_action("Send Invoices to Customer", () => {
-		const selected = [];
-		if (with_fu) {
-			d.$wrapper.find(".dci-check:checked").each((_, el) => {
-				const inv = invoices[parseInt($(el).data("idx"))];
-				if (inv) selected.push(inv);
-			});
-		}
-		const to_send = selected.length > 0 ? selected : invoices;
-		
-		frappe.confirm(`Are you sure you want to email ${to_send.length} invoice(s) to ${customer}?`, () => {
-			frappe.call({
-				method: "debt_collection.debt_collection.api.debt_api.send_outstanding_invoices_email",
-				args: {
-					customer: customer,
-					invoices: JSON.stringify(to_send)
-				},
-				freeze: true,
-				freeze_message: "Sending email...",
-				callback: function(r) {
-					if (!r.exc) {
-						// Optional: auto-hide the dialog?
-					}
-				}
-			});
-		});
-	});
 
 	d.show();
 
-	// Wire Select All after dialog renders
-	if (with_fu) {
-		setTimeout(() => {
+	// Wire events after dialog renders
+	setTimeout(() => {
+		if (with_fu) {
 			d.$wrapper.find("#dci-select-all").on("change", function() {
 				d.$wrapper.find(".dci-check").prop("checked", this.checked);
 			});
-		}, 100);
-	}
+		}
+
+		d.$wrapper.find("#dci-send-invoices").on("click", function() {
+			const selected = [];
+			if (with_fu) {
+				d.$wrapper.find(".dci-check:checked").each((_, el) => {
+					const inv = invoices[parseInt($(el).data("idx"))];
+					if (inv) selected.push(inv);
+				});
+			}
+			const to_send = selected.length > 0 ? selected : invoices;
+			
+			frappe.confirm(`Are you sure you want to email ${to_send.length} invoice(s) to ${customer}?`, () => {
+				frappe.call({
+					method: "debt_collection.debt_collection.api.debt_api.send_outstanding_invoices_email",
+					args: {
+						customer: customer,
+						invoices: JSON.stringify(to_send)
+					},
+					freeze: true,
+					freeze_message: "Sending email...",
+					callback: function(r) {
+						if (!r.exc) {
+							// Optional: auto-hide the dialog?
+						}
+					}
+				});
+			});
+		});
+	}, 100);
+
+
 };
