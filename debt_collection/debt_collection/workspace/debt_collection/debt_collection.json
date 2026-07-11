@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"0L6riBumCR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"ByoUktwgr1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"KD3h97F3HE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"Ho7-aZmstV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Dashboard\",\"col\":3}},{\"id\":\"6RIyitWkIc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person Dashboard\",\"col\":3}},{\"id\":\"6UthxneJtC\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Plans\",\"col\":3}},{\"id\":\"dRkz9XzZef\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Unreconciled Entries\",\"col\":3}},{\"id\":\"Y3-Cx30cKF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}},{\"id\":\"hMpX50fk52\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Report\",\"col\":3}}]",
+ "content": "[{\"id\":\"0L6riBumCR\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Debt Collection</span>\",\"col\":12}},{\"id\":\"ByoUktwgr1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Dashboard\",\"col\":3}},{\"id\":\"KD3h97F3HE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Outstanding Invoices\",\"col\":3}},{\"id\":\"Ho7-aZmstV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Dashboard\",\"col\":3}},{\"id\":\"6RIyitWkIc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Person Dashboard\",\"col\":3}},{\"id\":\"6UthxneJtC\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Active Plans\",\"col\":3}},{\"id\":\"dRkz9XzZef\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Unreconciled Entries\",\"col\":3}},{\"id\":\"Y3-Cx30cKF\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Weekly Collection Plan\",\"col\":3}},{\"id\":\"hMpX50fk52\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Follow Up Report\",\"col\":3}},{\"id\":\"bufBGzsf46\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Debt Collection Settings\",\"col\":3}}]",
  "creation": "2026-06-05 10:24:24.387679",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "is_hidden": 0,
  "label": "Debt Collection",
  "links": [],
- "modified": "2026-07-06 15:13:08.432601",
+ "modified": "2026-07-11 09:00:17.400621",
  "modified_by": "Administrator",
  "module": "Debt Collection",
  "name": "Debt Collection",
@@ -32,6 +32,13 @@
    "link_to": "Follow Up Report",
    "report_ref_doctype": "Collection Follow Up",
    "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Debt Collection Settings",
+   "link_to": "Debt Collection Settings",
+   "type": "DocType"
   },
   {
    "color": "Grey",
