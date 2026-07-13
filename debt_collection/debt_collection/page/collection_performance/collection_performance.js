@@ -20,6 +20,26 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		}
 	});
 
+	page.add_field({
+		fieldname: 'from_date',
+		label: __('From Date'),
+		fieldtype: 'Date',
+		default: '',
+		change: function() {
+			load_data();
+		}
+	});
+
+	page.add_field({
+		fieldname: 'to_date',
+		label: __('To Date'),
+		fieldtype: 'Date',
+		default: '',
+		change: function() {
+			load_data();
+		}
+	});
+
 	// Setup basic HTML structure
 	$(wrapper).find('.layout-main-section').html(`
 		<style>
@@ -187,11 +207,15 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		$('#cp-content').hide();
 		
 		let status = page.fields_dict.status ? page.fields_dict.status.get_value() : '';
+		let from_date = page.fields_dict.from_date ? page.fields_dict.from_date.get_value() : '';
+		let to_date = page.fields_dict.to_date ? page.fields_dict.to_date.get_value() : '';
 		
 		frappe.call({
 			method: 'debt_collection.debt_collection.page.collection_performance.collection_performance.get_performance_data',
 			args: {
-				status: status
+				status: status,
+				from_date: from_date,
+				to_date: to_date
 			},
 			callback: function(r) {
 				if (r.message) {

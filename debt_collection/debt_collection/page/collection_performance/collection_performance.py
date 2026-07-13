@@ -1,7 +1,7 @@
 import frappe
 
 @frappe.whitelist()
-def get_performance_data(status=None):
+def get_performance_data(status=None, from_date=None, to_date=None):
 	"""
 	Returns performance metrics for the Collection Performance Dashboard.
 	Shows collections per collector based on Weekly Collection Plan Customer data.
@@ -11,7 +11,11 @@ def get_performance_data(status=None):
 	
 	status_condition = ""
 	if status:
-		status_condition = "AND parent.status = %(status)s"
+		status_condition += " AND parent.status = %(status)s"
+	if from_date:
+		status_condition += " AND parent.start_date >= %(from_date)s"
+	if to_date:
+		status_condition += " AND parent.start_date <= %(to_date)s"
 
 	query = f"""
 		SELECT 
@@ -26,7 +30,7 @@ def get_performance_data(status=None):
 		ORDER BY total_collected DESC
 	"""
 	
-	data = frappe.db.sql(query, {"status": status}, as_dict=True)
+	data = frappe.db.sql(query, {"status": status, "from_date": from_date, "to_date": to_date}, as_dict=True)
 	
 	# Enrich with percentages
 	for row in data:
