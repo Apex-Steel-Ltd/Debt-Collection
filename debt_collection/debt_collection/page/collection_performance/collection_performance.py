@@ -1,27 +1,32 @@
 import frappe
 
 @frappe.whitelist()
-def get_performance_data():
+def get_performance_data(status=None):
 	"""
 	Returns performance metrics for the Collection Performance Dashboard.
 	Shows collections per collector based on Weekly Collection Plan Customer data.
 	"""
 	# Query total outstanding planned vs total collected
-	# We'll aggregate by debt_collector.
+	# We'll aggregate by sales_representative instead of debt_collector.
 	
-	query = """
+	status_condition = ""
+	if status:
+		status_condition = "AND parent.status = %(status)s"
+
+	query = f"""
 		SELECT 
-			COALESCE(NULLIF(debt_collector, ''), 'Unassigned') as collector,
-			COUNT(DISTINCT customer) as customers_assigned,
-			SUM(net_outstanding) as total_planned,
-			SUM(collected_amount) as total_collected
-		FROM `tabWeekly Collection Plan Customer`
-		WHERE docstatus < 2
+			COALESCE(NULLIF(child.sales_representative, ''), 'Unassigned') as collector,
+			COUNT(DISTINCT child.customer) as customers_assigned,
+			SUM(child.net_outstanding) as total_planned,
+			SUM(child.collected_amount) as total_collected
+		FROM `tabWeekly Collection Plan Customer` child
+		JOIN `tabWeekly Collection Plan` parent ON child.parent = parent.name
+		WHERE child.docstatus < 2 {status_condition}
 		GROUP BY collector
 		ORDER BY total_collected DESC
 	"""
 	
-	data = frappe.db.sql(query, as_dict=True)
+	data = frappe.db.sql(query, {"status": status}, as_dict=True)
 	
 	# Enrich with percentages
 	for row in data:

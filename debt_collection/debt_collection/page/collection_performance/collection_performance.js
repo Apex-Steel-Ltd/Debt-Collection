@@ -5,6 +5,21 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
+	page.add_field({
+		fieldname: 'status',
+		label: __('Status'),
+		fieldtype: 'Select',
+		options: [
+			{value: '', label: __('All Time Data')},
+			{value: 'Open', label: __('Open')},
+			{value: 'Closed', label: __('Closed')}
+		],
+		default: '',
+		change: function() {
+			load_data();
+		}
+	});
+
 	// Setup basic HTML structure
 	$(wrapper).find('.layout-main-section').html(`
 		<style>
@@ -171,8 +186,13 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		$('#cp-loading').show();
 		$('#cp-content').hide();
 		
+		let status = page.fields_dict.status ? page.fields_dict.status.get_value() : '';
+		
 		frappe.call({
 			method: 'debt_collection.debt_collection.page.collection_performance.collection_performance.get_performance_data',
+			args: {
+				status: status
+			},
 			callback: function(r) {
 				if (r.message) {
 					render_dashboard(r.message);
