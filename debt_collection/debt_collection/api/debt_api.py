@@ -579,6 +579,10 @@ def add_customers_to_plan(customers, week_start):
 	return {"plan": plan.name, "added": added, "skipped": skipped}
 
 
+@frappe.whitelist()
+def get_customer_plan_stats(customer):
+	return _get_customer_stats(customer)
+
 def _get_customer_stats(customer):
 	"""Quick stats for a single customer."""
 	today = getdate(nowdate())
