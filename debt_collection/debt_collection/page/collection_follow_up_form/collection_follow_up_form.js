@@ -44,7 +44,7 @@ class CollectionFollowUpFormPage {
 					</div>
 					<div id="fu-form"></div>
 					<!-- CC Contacts multi-select -->
-					<div style="margin-bottom:14px;">
+					<div id="fu-cc-container" style="margin-bottom:14px;">
 						<label style="font-size:11px;color:#718096;text-transform:uppercase;
 						              letter-spacing:.4px;display:block;margin-bottom:6px;">
 							CC Contacts
@@ -143,6 +143,9 @@ class CollectionFollowUpFormPage {
 						links: [{link_doctype: "Customer", link_name: this.customer}]
 					});
 				});
+
+				// Move CC Contacts here
+				$("#fu-cc-container").insertAfter(w);
 			}
 		});
 
