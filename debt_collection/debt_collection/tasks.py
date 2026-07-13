@@ -50,7 +50,8 @@ def _send_follow_up_reminders(today, cc_list):
 						subject=subject,
 						message=message,
 						reference_doctype="Collection Follow Up",
-						reference_name=fu.name
+						reference_name=fu.name,
+						expose_recipients="header"
 					)
 				except Exception:
 					frappe.log_error("Failed to send Follow-Up Reminder", "Debt Collection Tasks")
@@ -102,7 +103,8 @@ def _send_pdc_reminders(today, target_3_days, cc_list):
 				subject=subject,
 				message=message,
 				reference_doctype="Payment Entry",
-				reference_name=pdc.name
+				reference_name=pdc.name,
+				expose_recipients="header"
 			)
 		except Exception:
 			frappe.log_error("Failed to send PDC Maturity Reminder", "Debt Collection Tasks")
