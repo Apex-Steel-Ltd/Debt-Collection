@@ -88,6 +88,7 @@ class CollectionFollowUp(Document):
 				message=message,
 				reference_doctype=self.doctype,
 				reference_name=self.name,
+				expose_recipients="header"
 			)
 			frappe.msgprint(
 				f"Follow-up email sent to {', '.join(recipients)}",

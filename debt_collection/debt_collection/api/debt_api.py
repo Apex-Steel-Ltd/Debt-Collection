@@ -1394,6 +1394,7 @@ def send_outstanding_invoices_email(customer, invoices):
 			message=message,
 			reference_doctype="Customer",
 			reference_name=customer,
+			expose_recipients="header"
 		)
 		frappe.msgprint("Email sent successfully.", indicator="green", alert=True)
 	except Exception:

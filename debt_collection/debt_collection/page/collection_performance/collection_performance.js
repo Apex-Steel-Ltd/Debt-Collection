@@ -5,40 +5,10 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		single_column: true
 	});
 
-	page.add_field({
-		fieldname: 'status',
-		label: __('Status'),
-		fieldtype: 'Select',
-		options: [
-			{value: '', label: __('All Time Data')},
-			{value: 'Open', label: __('Open')},
-			{value: 'Closed', label: __('Closed')}
-		],
-		default: '',
-		change: function() {
-			load_data();
-		}
-	});
-
-	page.add_field({
-		fieldname: 'from_date',
-		label: __('From Date'),
-		fieldtype: 'Date',
-		default: '',
-		change: function() {
-			load_data();
-		}
-	});
-
-	page.add_field({
-		fieldname: 'to_date',
-		label: __('To Date'),
-		fieldtype: 'Date',
-		default: '',
-		change: function() {
-			load_data();
-		}
-	});
+	const inp = `style="height:28px;border:1px solid #cbd5e0;border-radius:4px;padding:0 8px;
+						font-size:12px;color:#2d3748;background:#fff;outline:none;"`;
+	const lbl = `style="font-size:11px;color:#718096;margin-bottom:3px;display:block;
+						text-transform:uppercase;letter-spacing:.4px;"`;
 
 	// Setup basic HTML structure
 	$(wrapper).find('.layout-main-section').html(`
@@ -175,6 +145,34 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 			}
 		</style>
 		<div class="cp-dashboard">
+			<!-- Filter bar -->
+			<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
+						background:#fff;border:1px solid #e2e8f0;border-radius:8px;
+						padding:12px 16px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+				<div>
+					<label ${lbl}>Status</label>
+					<select id="cp-status" ${inp} style="min-width:150px;">
+						<option value="">All Time Data</option>
+						<option value="Open">Open</option>
+						<option value="Closed">Closed</option>
+					</select>
+				</div>
+				<div>
+					<label ${lbl}>From Date</label>
+					<input type="date" id="cp-from-date" ${inp}>
+				</div>
+				<div>
+					<label ${lbl}>To Date</label>
+					<input type="date" id="cp-to-date" ${inp}>
+				</div>
+				<button id="cp-clear-filters"
+						style="height:28px;padding:0 12px;border:1px solid #cbd5e0;
+							   border-radius:4px;background:#fff;color:#718096;
+							   font-size:12px;cursor:pointer;">
+					Clear Filters
+				</button>
+			</div>
+
 			<div id="cp-loading" style="text-align:center; padding: 40px; color: #64748b;">
 				<i class="fa fa-spinner fa-spin fa-2x"></i>
 				<p style="margin-top: 10px;">Loading Performance Data...</p>
@@ -199,6 +197,18 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		</div>
 	`);
 
+	// Setup events
+	$(wrapper).on("change", "#cp-status, #cp-from-date, #cp-to-date", function() {
+		load_data();
+	});
+
+	$(wrapper).on("click", "#cp-clear-filters", function() {
+		$("#cp-status").val("");
+		$("#cp-from-date").val("");
+		$("#cp-to-date").val("");
+		load_data();
+	});
+
 	page.set_primary_action('Refresh', () => load_data(), 'refresh');
 	load_data();
 
@@ -206,9 +216,9 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		$('#cp-loading').show();
 		$('#cp-content').hide();
 		
-		let status = page.fields_dict.status ? page.fields_dict.status.get_value() : '';
-		let from_date = page.fields_dict.from_date ? page.fields_dict.from_date.get_value() : '';
-		let to_date = page.fields_dict.to_date ? page.fields_dict.to_date.get_value() : '';
+		let status = $('#cp-status').val();
+		let from_date = $('#cp-from-date').val();
+		let to_date = $('#cp-to-date').val();
 		
 		frappe.call({
 			method: 'debt_collection.debt_collection.page.collection_performance.collection_performance.get_performance_data',
