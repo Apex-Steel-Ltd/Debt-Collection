@@ -20,22 +20,55 @@ def get_performance_data(status=None, from_date=None, to_date=None):
 	query = f"""
 		SELECT 
 			COALESCE(NULLIF(child.sales_representative, ''), 'Unassigned') as collector,
-			COUNT(DISTINCT child.customer) as customers_assigned,
-			SUM(child.net_outstanding) as total_planned,
-			SUM(child.collected_amount) as total_collected
+			child.customer,
+			child.net_outstanding,
+			child.collected_amount,
+			parent.start_date
 		FROM `tabWeekly Collection Plan Customer` child
 		JOIN `tabWeekly Collection Plan` parent ON child.parent = parent.name
 		WHERE child.docstatus < 2 {status_condition}
-		GROUP BY collector
-		ORDER BY total_collected DESC
+		ORDER BY parent.start_date DESC
 	"""
 	
-	data = frappe.db.sql(query, {"status": status, "from_date": from_date, "to_date": to_date}, as_dict=True)
+	raw_data = frappe.db.sql(query, {"status": status, "from_date": from_date, "to_date": to_date}, as_dict=True)
+	
+	collectors = {}
+	
+	for row in raw_data:
+		collector = row.collector
+		customer = row.customer
+		if collector not in collectors:
+			collectors[collector] = {
+				"collector": collector,
+				"customers": {}, 
+			}
+			
+		c_dict = collectors[collector]["customers"]
+		if customer not in c_dict:
+			c_dict[customer] = {
+				"net_outstanding": frappe.utils.flt(row.net_outstanding),
+				"collected_amount": 0.0
+			}
+		
+		c_dict[customer]["collected_amount"] += frappe.utils.flt(row.collected_amount)
+
+	data = []
+	for collector, c_data in collectors.items():
+		customers_assigned = len(c_data["customers"])
+		total_planned = sum(c["net_outstanding"] for c in c_data["customers"].values())
+		total_collected = sum(c["collected_amount"] for c in c_data["customers"].values())
+		
+		data.append({
+			"collector": collector,
+			"customers_assigned": customers_assigned,
+			"total_planned": total_planned,
+			"total_collected": total_collected
+		})
+		
+	data.sort(key=lambda x: x["total_collected"], reverse=True)
 	
 	# Enrich with percentages
 	for row in data:
-		row['total_planned'] = frappe.utils.flt(row['total_planned'])
-		row['total_collected'] = frappe.utils.flt(row['total_collected'])
 		if row['total_planned'] > 0:
 			row['collection_percent'] = round((row['total_collected'] / row['total_planned']) * 100, 2)
 		else:
