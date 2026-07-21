@@ -1,70 +1,108 @@
 import frappe
 
 @frappe.whitelist()
-def get_performance_data(status=None, from_date=None, to_date=None):
+def get_performance_data(from_date=None, to_date=None):
 	"""
 	Returns performance metrics for the Collection Performance Dashboard.
-	Shows collections per collector based on Weekly Collection Plan Customer data.
+	Groups by Sales Person and calculates:
+	- Assigned Customers
+	- Total Outstanding (current outstanding from Sales Invoices)
+	- Amount Collected (from Payment Entries within date range)
 	"""
-	# Query total outstanding planned vs total collected
-	# We'll aggregate by sales_representative instead of debt_collector.
+	import frappe
+	from frappe.utils import flt
+
+	# Base query to resolve sales person per customer
+	resolved_sp_query = """
+		SELECT
+			c.name AS customer,
+			COALESCE(
+				(SELECT st_c.sales_person
+				 FROM `tabSales Team` st_c
+				 WHERE st_c.parent = c.name
+				   AND st_c.parenttype = 'Customer'
+				   AND st_c.sales_person IS NOT NULL
+				   AND st_c.sales_person != ''
+				 LIMIT 1),
+				(SELECT st_i.sales_person
+				 FROM `tabSales Team` st_i
+				 INNER JOIN `tabSales Invoice` si_fb
+					 ON si_fb.name = st_i.parent
+				 WHERE si_fb.customer = c.name
+				   AND st_i.parenttype = 'Sales Invoice'
+				   AND st_i.sales_person IS NOT NULL
+				   AND st_i.sales_person != ''
+				   AND si_fb.docstatus = 1
+				 LIMIT 1)
+			) AS sales_person
+		FROM `tabCustomer` c
+	"""
+
+	# 1. Get Outstanding Amount and Customer Count per Sales Person
+	outstanding_sql = f"""
+		SELECT
+			resolved_sp.sales_person AS collector,
+			COUNT(DISTINCT si.customer) AS customers_assigned,
+			SUM(si.outstanding_amount) AS total_planned
+		FROM `tabSales Invoice` si
+		INNER JOIN ({resolved_sp_query}) resolved_sp 
+			ON resolved_sp.customer = si.customer
+			AND resolved_sp.sales_person IS NOT NULL
+		WHERE si.docstatus = 1
+		  AND si.outstanding_amount > 0
+		  AND si.is_return = 0
+		GROUP BY resolved_sp.sales_person
+	"""
+	outstanding_data = frappe.db.sql(outstanding_sql, as_dict=True)
 	
-	status_condition = ""
-	if status:
-		status_condition += " AND parent.status = %(status)s"
+	# 2. Get Collected Amount per Sales Person (filtered by date)
+	date_condition = ""
+	date_params = {}
 	if from_date:
-		status_condition += " AND parent.start_date >= %(from_date)s"
+		date_condition += " AND pe.posting_date >= %(from_date)s"
+		date_params["from_date"] = from_date
 	if to_date:
-		status_condition += " AND parent.start_date <= %(to_date)s"
+		date_condition += " AND pe.posting_date <= %(to_date)s"
+		date_params["to_date"] = to_date
 
-	query = f"""
-		SELECT 
-			COALESCE(NULLIF(child.sales_representative, ''), 'Unassigned') as collector,
-			child.customer,
-			child.net_outstanding,
-			child.collected_amount,
-			parent.start_date
-		FROM `tabWeekly Collection Plan Customer` child
-		JOIN `tabWeekly Collection Plan` parent ON child.parent = parent.name
-		WHERE child.docstatus < 2 {status_condition}
-		ORDER BY parent.start_date DESC
+	collected_sql = f"""
+		SELECT
+			resolved_sp.sales_person AS collector,
+			SUM(pe.paid_amount) AS total_collected
+		FROM `tabPayment Entry` pe
+		INNER JOIN ({resolved_sp_query}) resolved_sp 
+			ON resolved_sp.customer = pe.party
+			AND resolved_sp.sales_person IS NOT NULL
+		WHERE pe.docstatus = 1
+		  AND pe.party_type = 'Customer'
+		  AND pe.payment_type = 'Receive'
+		  {date_condition}
+		GROUP BY resolved_sp.sales_person
 	"""
-	
-	raw_data = frappe.db.sql(query, {"status": status, "from_date": from_date, "to_date": to_date}, as_dict=True)
-	
-	collectors = {}
-	
-	for row in raw_data:
-		collector = row.collector
-		customer = row.customer
-		if collector not in collectors:
-			collectors[collector] = {
-				"collector": collector,
-				"customers": {}, 
-			}
-			
-		c_dict = collectors[collector]["customers"]
-		if customer not in c_dict:
-			c_dict[customer] = {
-				"net_outstanding": frappe.utils.flt(row.net_outstanding),
-				"collected_amount": 0.0
-			}
-		
-		c_dict[customer]["collected_amount"] += frappe.utils.flt(row.collected_amount)
+	collected_data = frappe.db.sql(collected_sql, date_params, as_dict=True)
 
-	data = []
-	for collector, c_data in collectors.items():
-		customers_assigned = len(c_data["customers"])
-		total_planned = sum(c["net_outstanding"] for c in c_data["customers"].values())
-		total_collected = sum(c["collected_amount"] for c in c_data["customers"].values())
+	# Combine the data
+	collector_map = {}
+	
+	for row in outstanding_data:
+		collector_map[row.collector] = {
+			"collector": row.collector,
+			"customers_assigned": row.customers_assigned,
+			"total_planned": flt(row.total_planned),
+			"total_collected": 0.0
+		}
 		
-		data.append({
-			"collector": collector,
-			"customers_assigned": customers_assigned,
-			"total_planned": total_planned,
-			"total_collected": total_collected
-		})
-		
+	for row in collected_data:
+		if row.collector not in collector_map:
+			collector_map[row.collector] = {
+				"collector": row.collector,
+				"customers_assigned": 0,
+				"total_planned": 0.0,
+				"total_collected": 0.0
+			}
+		collector_map[row.collector]["total_collected"] += flt(row.total_collected)
+
+	data = list(collector_map.values())
 	data.sort(key=lambda x: x["total_collected"], reverse=True)
 	
 	# Enrich with percentages

@@ -150,14 +150,6 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 						background:#fff;border:1px solid #e2e8f0;border-radius:8px;
 						padding:12px 16px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
 				<div>
-					<label ${lbl}>Status</label>
-					<select id="cp-status" ${inp} style="min-width:150px;">
-						<option value="">All Time Data</option>
-						<option value="Open">Open</option>
-						<option value="Closed">Closed</option>
-					</select>
-				</div>
-				<div>
 					<label ${lbl}>From Date</label>
 					<input type="date" id="cp-from-date" ${inp}>
 				</div>
@@ -183,9 +175,9 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 					<table class="cp-table">
 						<thead>
 							<tr>
-								<th>Collector</th>
+								<th>Sales Person</th>
 								<th>Assigned Customers</th>
-								<th>Planned Collections</th>
+								<th>Total Outstanding</th>
 								<th>Amount Collected</th>
 								<th>Performance</th>
 							</tr>
@@ -198,12 +190,11 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 	`);
 
 	// Setup events
-	$(wrapper).on("change", "#cp-status, #cp-from-date, #cp-to-date", function() {
+	$(wrapper).on("change", "#cp-from-date, #cp-to-date", function() {
 		load_data();
 	});
 
 	$(wrapper).on("click", "#cp-clear-filters", function() {
-		$("#cp-status").val("");
 		$("#cp-from-date").val("");
 		$("#cp-to-date").val("");
 		load_data();
@@ -216,14 +207,12 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 		$('#cp-loading').show();
 		$('#cp-content').hide();
 		
-		let status = $('#cp-status').val();
 		let from_date = $('#cp-from-date').val();
 		let to_date = $('#cp-to-date').val();
 		
 		frappe.call({
 			method: 'debt_collection.debt_collection.page.collection_performance.collection_performance.get_performance_data',
 			args: {
-				status: status,
 				from_date: from_date,
 				to_date: to_date
 			},
@@ -264,7 +253,7 @@ frappe.pages['collection-performance'].on_page_load = function(wrapper) {
 				<div class="cp-card-title">Overall Performance</div>
 			</div>
 			<div class="cp-card primary">
-				<div class="cp-card-title">Total Planned</div>
+				<div class="cp-card-title">Total Outstanding</div>
 				<div class="cp-card-value">${fmt(summary.total_planned)}</div>
 			</div>
 			<div class="cp-card" style="border-bottom: 4px solid #22c55e;">

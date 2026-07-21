@@ -354,6 +354,7 @@ class OutstandingInvoicesPage {
 				if (!r.message) return;
 				dc_show_customer_invoices(customer, r.message.invoices, r.message.ageing, {
 					show_follow_up: false,
+					selectable: true,
 				});
 			},
 		});

@@ -17,6 +17,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 	opts = opts || {};
 	const fmt    = (v) => format_currency(v, "KES");
 	const with_fu = !!opts.show_follow_up;
+	const selectable = with_fu || !!opts.selectable;
 
 	// ── Ageing buckets ───────────────────────────────────────────────────────
 	const ageing_html = (ageing || []).map(b => `
@@ -36,7 +37,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 
 	const invoice_rows = invoices.map((inv, i) => `
 		<tr class="dc-tr-hover" style="transition:background .1s;">
-			${with_fu ? `<td ${td()}><input type="checkbox" class="dci-check" data-idx="${i}"></td>` : ""}
+			${selectable ? `<td ${td()}><input type="checkbox" class="dci-check" data-idx="${i}"></td>` : ""}
 			<td ${td()}>${i + 1}</td>
 			<td ${td()}>
 				<a href="/app/sales-invoice/${inv.name}" target="_blank"
@@ -58,7 +59,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 		</tr>
 	`).join("");
 
-	const cols = with_fu ? 12 : 11;
+	const cols = selectable ? 12 : 11;
 
 	const dialog_opts = {
 		title: customer,
@@ -89,7 +90,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
 							Send Invoices to Customer
 						</button>
-						${with_fu ? `
+						${selectable ? `
 						<label style="display:flex;align-items:center;gap:6px;font-size:13px;
 						              color:#4a5568;cursor:pointer;font-weight:600;">
 							<input type="checkbox" id="dci-select-all"
@@ -102,7 +103,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 					<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
 						<thead style="background:#f7fafc;">
 							<tr>
-								${with_fu ? `<th ${th("30px")}></th>` : ""}
+								${selectable ? `<th ${th("30px")}></th>` : ""}
 								<th ${th()}>#</th>
 								<th ${th()}>Trx No.</th>
 								<th ${th()}>Terms</th>
@@ -160,7 +161,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 
 	// Wire events after dialog renders
 	setTimeout(() => {
-		if (with_fu) {
+		if (selectable) {
 			d.$wrapper.find("#dci-select-all").on("change", function() {
 				d.$wrapper.find(".dci-check").prop("checked", this.checked);
 			});
@@ -168,7 +169,7 @@ window.dc_show_customer_invoices = function(customer, invoices, ageing, opts) {
 
 		d.$wrapper.find("#dci-send-invoices").on("click", function() {
 			const selected = [];
-			if (with_fu) {
+			if (selectable) {
 				d.$wrapper.find(".dci-check:checked").each((_, el) => {
 					const inv = invoices[parseInt($(el).data("idx"))];
 					if (inv) selected.push(inv);
