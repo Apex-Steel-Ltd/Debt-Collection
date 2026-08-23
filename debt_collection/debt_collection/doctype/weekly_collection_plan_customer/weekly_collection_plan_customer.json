@@ -20,6 +20,7 @@
   "col_break_3",
   "avg_overdue_days",
   "planner_invoices",
+  "collected_amount",
   "status"
  ],
  "fields": [
@@ -112,6 +113,12 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Planned\nIn Progress\nActioned\nCollected"
+  },
+  {
+   "fieldname": "collected_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Collected Amount"
   }
  ],
  "index_web_pages_for_search": 0,

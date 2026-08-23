@@ -52,6 +52,7 @@ class OutstandingInvoicesPage {
 
 		$(this.page.body).html(`
 			<div style="padding:20px;">
+				<style>.dc-tr-hover:hover { background-color: #f7fafc !important; }</style>
 
 				<!-- Filter bar -->
 				<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;
@@ -219,8 +220,7 @@ class OutstandingInvoicesPage {
 		const td_base = `style="padding:9px 12px;border-bottom:1px solid #edf2f7;font-size:13px;color:#2d3748;"`;
 
 		const row_html = rows.map(r => `
-			<tr style="transition:background .1s;" onmouseover="this.style.background='#f7fafc'"
-			    onmouseout="this.style.background=''">
+			<tr class="dc-tr-hover" style="transition:background .1s;">
 				<td ${td_base}><input type="checkbox" class="oi-row-check" data-customer="${r.customer}"></td>
 				<td ${td_base}>
 					<button class="oi-view-btn" data-customer="${r.customer}"
@@ -354,6 +354,7 @@ class OutstandingInvoicesPage {
 				if (!r.message) return;
 				dc_show_customer_invoices(customer, r.message.invoices, r.message.ageing, {
 					show_follow_up: false,
+					selectable: true,
 				});
 			},
 		});

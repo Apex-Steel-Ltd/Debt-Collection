@@ -579,6 +579,10 @@ def add_customers_to_plan(customers, week_start):
 	return {"plan": plan.name, "added": added, "skipped": skipped}
 
 
+@frappe.whitelist()
+def get_customer_plan_stats(customer):
+	return _get_customer_stats(customer)
+
 def _get_customer_stats(customer):
 	"""Quick stats for a single customer."""
 	today = getdate(nowdate())
@@ -861,7 +865,7 @@ def get_active_plans():
 			SUM(wcpc.net_outstanding)             AS total_net_outstanding,
 			SUM(wcpc.avg_overdue_days * 1)        AS sum_overdue,
 			SUM(CASE WHEN wcpc.status = 'Planned'   THEN 1 ELSE 0 END) AS count_planned,
-			SUM(CASE WHEN wcpc.status = 'Completed' THEN 1 ELSE 0 END) AS count_completed,
+			SUM(CASE WHEN wcpc.status = 'Collected' THEN 1 ELSE 0 END) AS count_completed,
 			SUM(CASE WHEN wcpc.status = 'Skipped'   THEN 1 ELSE 0 END) AS count_skipped
 		FROM `tabWeekly Collection Plan` wcp
 		LEFT JOIN `tabWeekly Collection Plan Customer` wcpc ON wcpc.parent = wcp.name
@@ -911,6 +915,37 @@ def get_active_plans():
 		)
 
 	return plans
+
+
+@frappe.whitelist()
+def get_contact_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Link field search for Contact filtered by customer."""
+	customer = (filters or {}).get("customer", "")
+	return frappe.db.sql("""
+		SELECT DISTINCT c.name, c.full_name
+		FROM `tabContact` c
+		INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+			AND dl.link_doctype = 'Customer'
+			AND dl.link_name = %s
+		WHERE c.name LIKE %s OR c.full_name LIKE %s
+		ORDER BY c.full_name
+		LIMIT %s OFFSET %s
+	""", (customer, f"%{txt}%", f"%{txt}%", page_len, start))
+
+
+@frappe.whitelist()
+def get_contacts_for_customer(customer):
+	"""Return contacts linked to a customer, for the Contact Person field."""
+	rows = frappe.db.sql("""
+		SELECT DISTINCT c.name, c.full_name AS contact_name, ce.email_id
+		FROM `tabContact` c
+		INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+			AND dl.link_doctype = 'Customer'
+			AND dl.link_name = %s
+		LEFT JOIN `tabContact Email` ce ON ce.parent = c.name AND ce.is_primary = 1
+		ORDER BY c.full_name
+	""", customer, as_dict=True)
+	return rows
 
 
 @frappe.whitelist()
@@ -1270,3 +1305,98 @@ def save_follow_up(customer, contact_method, contact_person=None, cc_contacts=No
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return doc.name
+
+@frappe.whitelist()
+def send_outstanding_invoices_email(customer, invoices):
+	import json
+	if isinstance(invoices, str):
+		invoices = json.loads(invoices)
+
+	# Fetch customer email
+	customer_email = frappe.db.get_value("Customer", customer, "email_id")
+	if not customer_email:
+		frappe.throw(f"Customer {customer} does not have a primary email address configured.")
+
+	# Check settings
+	if not frappe.db.get_single_value("Debt Collection Settings", "send_emails"):
+		frappe.msgprint("Email sending is disabled in Debt Collection Settings.", alert=True)
+		return
+
+	# Default collectors for CC
+	cc_list = []
+	settings = frappe.get_doc("Debt Collection Settings")
+	if settings.default_collectors:
+		for row in settings.default_collectors:
+			if row.collector:
+				c_email = frappe.db.get_value("User", row.collector, "email")
+				if c_email and c_email not in cc_list:
+					cc_list.append(c_email)
+
+	if frappe.session.user and frappe.session.user != "Administrator":
+		user_email = frappe.db.get_value("User", frappe.session.user, "email")
+		if user_email and user_email not in cc_list:
+			cc_list.append(user_email)
+
+	invoice_rows = ""
+	for inv in invoices:
+		invoice_rows += f"""
+		<tr>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;">{inv.get('name')}</td>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;">{inv.get('invoice_date') or ''}</td>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;">{inv.get('due_date') or ''}</td>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;color:#e53e3e;font-weight:bold;">{inv.get('overdue_days') or 0} days</td>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">
+				{frappe.utils.fmt_money(inv.get('outstanding_amount'), currency='KES')}
+			</td>
+			<td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">
+				{frappe.utils.fmt_money(inv.get('net_outstanding'), currency='KES')}
+			</td>
+		</tr>
+		"""
+
+	message = f"""
+	<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:700px;margin:0 auto;color:#2d3748;">
+		<div style="background:linear-gradient(135deg,#1a365d,#2b6cb0);padding:24px 32px;border-radius:8px 8px 0 0;">
+			<h2 style="color:#fff;margin:0;font-size:22px;">Statement of Outstanding Invoices</h2>
+			<p style="color:#bee3f8;margin:4px 0 0;">Account Summary</p>
+		</div>
+		<div style="background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+			<p>Dear Customer,</p>
+			<p>This is a polite reminder regarding the outstanding balance on your account.
+			Please find below the list of your outstanding invoices.</p>
+
+			<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:20px;">
+				<thead>
+					<tr style="background:#f7fafc;">
+						<th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0;">Invoice No.</th>
+						<th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0;">Invoice Date</th>
+						<th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0;">Due Date</th>
+						<th style="padding:8px 10px;text-align:left;border-bottom:2px solid #e2e8f0;">Overdue Days</th>
+						<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #e2e8f0;">Outstanding Amt</th>
+						<th style="padding:8px 10px;text-align:right;border-bottom:2px solid #e2e8f0;">Net Outstanding</th>
+					</tr>
+				</thead>
+				<tbody>{invoice_rows}</tbody>
+			</table>
+
+			<p style="margin-top:24px;">
+				Please arrange for prompt payment. If payment has already been made, kindly ignore this message or provide the remittance details.
+			</p>
+		</div>
+	</div>
+	"""
+
+	try:
+		frappe.sendmail(
+			recipients=[customer_email],
+			cc=cc_list,
+			subject=f"Statement of Outstanding Invoices: {customer}",
+			message=message,
+			reference_doctype="Customer",
+			reference_name=customer,
+			expose_recipients="header"
+		)
+		frappe.msgprint("Email sent successfully.", indicator="green", alert=True)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Send Outstanding Invoices Error")
+		frappe.throw("An error occurred while sending the email.")
